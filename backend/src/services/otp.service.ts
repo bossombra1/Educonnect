@@ -42,7 +42,8 @@ async function findOtpUser(identity: OtpIdentity) {
   if (identity.matricule) {
     const [users] = await pool.query<RowDataPacket[]>(
       `SELECT u.id, u.matricule, u.phone, u.is_active, u.role_id, u.establishment_id,
-              u.first_name, u.last_name, r.name AS role_name
+              u.first_name, u.last_name, r.name AS role_name,
+              u.otp_code, u.otp_expires_at, u.otp_attempts, u.otp_requested_at
        FROM users u
        JOIN roles r ON r.id = u.role_id
        WHERE u.matricule = ? AND u.phone IN (${placeholders}) AND u.is_active = 1`,
@@ -52,7 +53,8 @@ async function findOtpUser(identity: OtpIdentity) {
   }
 
   let sql = `SELECT DISTINCT u.id, u.matricule, u.phone, u.is_active, u.role_id, u.establishment_id,
-                    u.first_name, u.last_name, r.name AS role_name
+                    u.first_name, u.last_name, r.name AS role_name,
+                    u.otp_code, u.otp_expires_at, u.otp_attempts, u.otp_requested_at
              FROM users u
              JOIN roles r ON r.id = u.role_id
              JOIN parents p ON p.user_id = u.id
