@@ -13,26 +13,21 @@ export async function getDashboardStats(establishmentId: number | null): Promise
   const classScope = scope('c', establishmentId);
   const messageScope = scope('m', establishmentId);
   const scheduledScope = scope('sm', establishmentId);
-  const groupScope = scope('g', establishmentId);
 
   const [userStats] = await pool.query<RowDataPacket[]>(
     `SELECT r.name AS role_name, COUNT(u.id) AS count
      FROM users u JOIN roles r ON r.id = u.role_id
      WHERE u.is_active = 1${userScope.clause} GROUP BY r.name`, userScope.params);
-
   const [classStats] = await pool.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS total FROM classes c WHERE c.is_active = 1${classScope.clause}`, classScope.params);
-
   const [messageStats] = await pool.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS total,
             SUM(CASE WHEN m.status = 'sent' THEN 1 ELSE 0 END) AS sent,
             SUM(CASE WHEN m.status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled
      FROM messages m WHERE 1=1${messageScope.clause}`, messageScope.params);
-
   const [scheduledStats] = await pool.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS pending_count FROM scheduled_messages sm
      WHERE sm.status = 'pending'${scheduledScope.clause}`, scheduledScope.params);
-
   const [readStats] = await pool.query<RowDataPacket[]>(
     `SELECT COUNT(mr.id) AS total_recipients,
             COUNT(DISTINCT CASE WHEN mr.delivery_status = 'delivered' THEN mr.id END) AS total_delivered,
@@ -41,7 +36,6 @@ export async function getDashboardStats(establishmentId: number | null): Promise
      JOIN messages m ON m.id = mr.message_id
      LEFT JOIN message_reads mr2 ON mr2.message_id = mr.message_id AND mr2.user_id = mr.user_id
      WHERE 1=1${messageScope.clause}`, messageScope.params);
-
   const [recentRows] = await pool.query<RowDataPacket[]>(
     `SELECT m.id, m.title, m.content, m.message_type, m.priority, m.status,
             m.sender_id, m.sent_at, m.created_at, m.updated_at,
@@ -52,7 +46,6 @@ export async function getDashboardStats(establishmentId: number | null): Promise
      LEFT JOIN message_reads mr2 ON mr2.message_id = m.id AND mr2.user_id = mr.user_id
      WHERE m.status = 'sent'${messageScope.clause}
      GROUP BY m.id ORDER BY COALESCE(m.sent_at, m.created_at) DESC LIMIT 5`, messageScope.params);
-
   const [dailyRows] = await pool.query<RowDataPacket[]>(
     `SELECT DATE(m.sent_at) AS date, COUNT(*) AS count
      FROM messages m WHERE m.status = 'sent' AND m.sent_at IS NOT NULL
@@ -63,7 +56,6 @@ export async function getDashboardStats(establishmentId: number | null): Promise
   for (const row of userStats) roles[row.role_name] = Number(row.count);
   const recipients = Number(readStats[0]?.total_recipients || 0);
   const readCount = Number(readStats[0]?.total_read || 0);
-
   return {
     totalStudents: roles.STUDENT || 0,
     totalParents: roles.PARENT || 0,
@@ -83,19 +75,33 @@ export async function getDashboardStats(establishmentId: number | null): Promise
   };
 }
 
-export async function getMessageStats(messageId: number): Promise<any> {
+export async function getMessageStats(messageId: number, establishmentId: number): Promise<any> {
   const pool = getPool();
   const [stats] = await pool.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS total,
             SUM(CASE WHEN mr.delivery_status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
             SUM(CASE WHEN mr.delivery_status = 'failed' THEN 1 ELSE 0 END) AS failed,
-            (SELECT COUNT(DISTINCT user_id) FROM message_reads WHERE message_id = ?) AS read_count,
-            (SELECT COUNT(DISTINCT user_id) FROM message_acknowledgements WHERE message_id = ?) AS acknowledged_count
-     FROM message_recipients mr WHERE mr.message_id = ?`, [messageId, messageId, messageId]);
+            (SELECT COUNT(DISTINCT rd.user_id)
+             FROM message_reads rd JOIN messages rm ON rm.id = rd.message_id
+             WHERE rd.message_id = ? AND rm.establishment_id = ?) AS read_count,
+            (SELECT COUNT(DISTINCT ma.user_id)
+             FROM message_acknowledgements ma JOIN messages am ON am.id = ma.message_id
+             WHERE ma.message_id = ? AND am.establishment_id = ?) AS acknowledged_count
+     FROM message_recipients mr
+     JOIN messages m ON m.id = mr.message_id
+     WHERE mr.message_id = ? AND m.establishment_id = ?`,
+    [messageId, establishmentId, messageId, establishmentId, messageId, establishmentId]);
   const row = stats[0];
   const total = Number(row?.total || 0);
   const readCount = Number(row?.read_count || 0);
-  return { total, delivered: Number(row?.delivered || 0), failed: Number(row?.failed || 0), read_count: readCount, acknowledged_count: Number(row?.acknowledged_count || 0), read_rate: total > 0 ? Math.round((readCount / total) * 100) : 0 };
+  return {
+    total,
+    delivered: Number(row?.delivered || 0),
+    failed: Number(row?.failed || 0),
+    read_count: readCount,
+    acknowledged_count: Number(row?.acknowledged_count || 0),
+    read_rate: total > 0 ? Math.round((readCount / total) * 100) : 0,
+  };
 }
 
 export async function getMessageStatsForEstablishment(establishmentId: number | null): Promise<any> {
