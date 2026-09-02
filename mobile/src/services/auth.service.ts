@@ -2,24 +2,26 @@ import apiClient from './api';
 import * as SecureStore from 'expo-secure-store';
 import type { User, OtpRequest, OtpResponse, ApiResponse } from '@/types';
 
-type BackendOtpUser = {
+type BackendUser = {
   id: number | string;
   matricule: string;
   first_name?: string | null;
   last_name?: string | null;
-  role: 'PARENT' | 'STUDENT' | 'STAFF' | string;
+  role?: 'PARENT' | 'STUDENT' | 'STAFF' | 'ADMIN' | 'SUPER_ADMIN' | string;
+  role_name?: 'PARENT' | 'STUDENT' | 'STAFF' | 'ADMIN' | 'SUPER_ADMIN' | string;
   establishment_id: number | string | null;
   phone?: string | null;
   email?: string | null;
   avatar_url?: string | null;
   establishment_name?: string | null;
-  created_at?: string;
+  created_at?: string | null;
 };
 
-function normalizeOtpUser(user: BackendOtpUser): User {
+function normalizeUser(user: BackendUser): User {
   const firstName = user.first_name?.trim() ?? '';
   const lastName = user.last_name?.trim() ?? '';
   const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+  const backendRole = user.role ?? user.role_name ?? '';
 
   const roleMap: Record<string, User['role']> = {
     PARENT: 'parent',
@@ -34,7 +36,7 @@ function normalizeOtpUser(user: BackendOtpUser): User {
     matricule: user.matricule,
     phone: user.phone ?? '',
     full_name: fullName || user.matricule,
-    role: roleMap[user.role] ?? 'staff',
+    role: roleMap[backendRole] ?? 'staff',
     ...(user.email ? { email: user.email } : {}),
     ...(user.avatar_url ? { avatar_url: user.avatar_url } : {}),
     establishment_id: user.establishment_id === null ? '' : String(user.establishment_id),
@@ -52,9 +54,8 @@ class AuthService {
 
   async verifyOtp(matricule: string, code: string): Promise<OtpResponse> {
     const payload: OtpRequest = { matricule, code };
-    const { data } = await apiClient.post<ApiResponse<{ token: string; user: BackendOtpUser }>>('/auth/otp/verify', payload);
-    const normalizedUser = normalizeOtpUser(data.data.user);
-    const response: OtpResponse = { token: data.data.token, user: normalizedUser };
+    const { data } = await apiClient.post<ApiResponse<{ token: string; user: BackendUser }>>('/auth/otp/verify', payload);
+    const response: OtpResponse = { token: data.data.token, user: normalizeUser(data.data.user) };
 
     await SecureStore.setItemAsync('auth_token', response.token);
     await SecureStore.setItemAsync('auth_user', JSON.stringify(response.user));
@@ -62,8 +63,8 @@ class AuthService {
   }
 
   async getProfile(): Promise<User> {
-    const { data } = await apiClient.get<ApiResponse<User>>('/auth/profile');
-    const user = data.data;
+    const { data } = await apiClient.get<ApiResponse<BackendUser>>('/auth/profile');
+    const user = normalizeUser(data.data);
     await SecureStore.setItemAsync('auth_user', JSON.stringify(user));
     return user;
   }
