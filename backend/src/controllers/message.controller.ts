@@ -45,7 +45,7 @@ export async function getMessageById(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const message = await messageService.getMessageById(messageId, user.userId, user.role);
+    const message = await messageService.getMessageById(messageId, user.userId, user.role, user.establishmentId);
 
     if (!message) {
       res.status(404).json({ success: false, error: 'Message non trouvé.' });
@@ -127,7 +127,7 @@ export async function markAsRead(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await messageService.markAsRead(messageId, user.userId);
+    await messageService.markAsRead(messageId, user.userId, user.establishmentId);
     res.status(200).json({ success: true, message: 'Message marqué comme lu.' });
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message });
@@ -144,7 +144,7 @@ export async function acknowledgeMessage(req: Request, res: Response): Promise<v
       return;
     }
 
-    await messageService.acknowledgeMessage(messageId, user.userId);
+    await messageService.acknowledgeMessage(messageId, user.userId, user.establishmentId);
     res.status(200).json({ success: true, message: 'Message acquitté avec succès.' });
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message });
@@ -153,6 +153,7 @@ export async function acknowledgeMessage(req: Request, res: Response): Promise<v
 
 export async function getMessageStatistics(req: Request, res: Response): Promise<void> {
   try {
+    const user = req.user as any;
     const messageId = parseInt(req.params.id);
 
     if (isNaN(messageId)) {
@@ -160,7 +161,7 @@ export async function getMessageStatistics(req: Request, res: Response): Promise
       return;
     }
 
-    const stats = await messageService.getMessageStatistics(messageId);
+    const stats = await messageService.getMessageStatistics(messageId, user.establishmentId);
     res.status(200).json({ success: true, data: stats });
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message });
@@ -213,12 +214,13 @@ export async function getUnreadCount(req: Request, res: Response): Promise<void>
 
 export async function cancelScheduledMessage(req: Request, res: Response): Promise<void> {
   try {
+    const user = req.user as any;
     const messageId = parseInt(req.params.id);
     if (isNaN(messageId)) {
       res.status(400).json({ success: false, error: 'ID invalide.' });
       return;
     }
-    await scheduledService.cancelScheduledMessage(messageId);
+    await scheduledService.cancelScheduledMessage(messageId, user.establishmentId);
     res.status(200).json({ success: true, message: 'Message programmé annulé.' });
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message });
