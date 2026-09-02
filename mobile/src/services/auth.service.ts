@@ -1,6 +1,6 @@
 import apiClient from './api';
 import * as SecureStore from 'expo-secure-store';
-import type { User, OtpRequest, OtpResponse, ApiResponse } from '@/types';
+import type { User, OtpRequest, OtpVerifyRequest, OtpResponse, ApiResponse } from '@/types';
 
 type BackendUser = {
   id: number | string;
@@ -15,6 +15,7 @@ type BackendUser = {
   avatar_url?: string | null;
   establishment_name?: string | null;
   created_at?: string | null;
+  children?: Array<Record<string, unknown>>;
 };
 
 function normalizeUser(user: BackendUser): User {
@@ -22,13 +23,8 @@ function normalizeUser(user: BackendUser): User {
   const lastName = user.last_name?.trim() ?? '';
   const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
   const backendRole = user.role ?? user.role_name ?? '';
-
   const roleMap: Record<string, User['role']> = {
-    PARENT: 'parent',
-    STUDENT: 'student',
-    STAFF: 'staff',
-    ADMIN: 'admin',
-    SUPER_ADMIN: 'admin',
+    PARENT: 'parent', STUDENT: 'student', STAFF: 'staff', ADMIN: 'admin', SUPER_ADMIN: 'admin',
   };
 
   return {
@@ -46,17 +42,18 @@ function normalizeUser(user: BackendUser): User {
 }
 
 class AuthService {
-  async requestOtp(matricule: string, phone: string): Promise<ApiResponse<{ message: string }>> {
-    const payload = { matricule, phone };
-    const { data } = await apiClient.post<ApiResponse<{ message: string }>>('/auth/otp/request', payload);
+  async requestOtp(request: OtpRequest): Promise<ApiResponse<{ message: string; requiresChildMatricule?: boolean }>> {
+    const { data } = await apiClient.post<ApiResponse<{ message: string; requiresChildMatricule?: boolean }>>(
+      '/auth/otp/request', request,
+    );
     return data;
   }
 
-  async verifyOtp(matricule: string, code: string): Promise<OtpResponse> {
-    const payload: OtpRequest = { matricule, code };
-    const { data } = await apiClient.post<ApiResponse<{ token: string; user: BackendUser }>>('/auth/otp/verify', payload);
+  async verifyOtp(request: OtpVerifyRequest): Promise<OtpResponse> {
+    const { data } = await apiClient.post<ApiResponse<{ token: string; user: BackendUser }>>(
+      '/auth/otp/verify', request,
+    );
     const response: OtpResponse = { token: data.data.token, user: normalizeUser(data.data.user) };
-
     await SecureStore.setItemAsync('auth_token', response.token);
     await SecureStore.setItemAsync('auth_user', JSON.stringify(response.user));
     return response;
@@ -70,11 +67,8 @@ class AuthService {
   }
 
   async logout(): Promise<void> {
-    try {
-      await apiClient.post('/auth/logout');
-    } catch {
-      // Ignorer les erreurs réseau lors de la déconnexion
-    } finally {
+    try { await apiClient.post('/auth/logout'); } catch { /* network errors are non-blocking */ }
+    finally {
       await SecureStore.deleteItemAsync('auth_token');
       await SecureStore.deleteItemAsync('auth_user');
     }
@@ -83,23 +77,12 @@ class AuthService {
   async getStoredUser(): Promise<User | null> {
     try {
       const raw = await SecureStore.getItemAsync('auth_user');
-      if (raw) {
-        return JSON.parse(raw) as User;
-      }
-    } catch {
-      // Données corrompues
-    }
-    return null;
+      return raw ? JSON.parse(raw) as User : null;
+    } catch { return null; }
   }
 
-  async getStoredToken(): Promise<string | null> {
-    return SecureStore.getItemAsync('auth_token');
-  }
-
-  async isAuthenticated(): Promise<boolean> {
-    const token = await this.getStoredToken();
-    return !!token;
-  }
+  async getStoredToken(): Promise<string | null> { return SecureStore.getItemAsync('auth_token'); }
+  async isAuthenticated(): Promise<boolean> { return !!(await this.getStoredToken()); }
 }
 
 export const authService = new AuthService();
