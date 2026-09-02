@@ -18,53 +18,64 @@ export async function sendMessage(
 
     let finalRecipientIds = [...recipientIds];
 
-    // Resolve recipients from groups
     if (data.group_ids && data.group_ids.length > 0) {
       const groupPlaceholders = data.group_ids.map(() => '?').join(',');
       const [groupMembers] = await conn.query<RowDataPacket[]>(
-        `SELECT DISTINCT user_id FROM group_members WHERE group_id IN (${groupPlaceholders})`,
-        data.group_ids
+        `SELECT DISTINCT gm.user_id
+         FROM group_members gm
+         JOIN groups g ON g.id = gm.group_id
+         WHERE gm.group_id IN (${groupPlaceholders})
+           AND g.establishment_id = ?`,
+        [...data.group_ids, establishmentId]
       );
-      const groupUserIds = groupMembers.map((m) => m.user_id);
+      const [groupCountRows] = await conn.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS count FROM groups WHERE id IN (${groupPlaceholders}) AND establishment_id = ?`,
+        [...data.group_ids, establishmentId]
+      );
+      if (Number(groupCountRows[0]?.count || 0) !== data.group_ids.length) {
+        throw new Error('Un ou plusieurs groupes appartiennent à un autre établissement ou n’existent pas.');
+      }
+      const groupUserIds = groupMembers.map((m) => Number(m.user_id));
       const set = new Set([...finalRecipientIds, ...groupUserIds]);
       finalRecipientIds = [...set].filter((id) => id !== senderId);
+    }
+
+    if (finalRecipientIds.length > 0) {
+      const recipientPlaceholders = finalRecipientIds.map(() => '?').join(',');
+      const [recipientRows] = await conn.query<RowDataPacket[]>(
+        `SELECT id FROM users WHERE id IN (${recipientPlaceholders}) AND establishment_id = ?`,
+        [...finalRecipientIds, establishmentId]
+      );
+      if (recipientRows.length !== finalRecipientIds.length) {
+        throw new Error('Un ou plusieurs destinataires appartiennent à un autre établissement ou n’existent pas.');
+      }
     }
 
     if (finalRecipientIds.length === 0) {
       throw new Error('Aucun destinataire spécifié.');
     }
 
-    // Determine message_type
-    let messageType: string = data.message_type || 'text';
+    const messageType: string = data.message_type || 'text';
+    let resolvedMessageType = messageType;
     if (attachments && attachments.length > 0 && messageType === 'text') {
       const ext = attachments[0].file_name.split('.').pop()?.toLowerCase();
-      if (ext === 'pdf') messageType = 'pdf';
-      else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) messageType = 'image';
+      if (ext === 'pdf') resolvedMessageType = 'pdf';
+      else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) resolvedMessageType = 'image';
     }
 
     const [msgResult] = await conn.query<ResultSetHeader>(
       `INSERT INTO messages (establishment_id, sender_id, title, content, message_type, priority, status, sent_at)
        VALUES (?, ?, ?, ?, ?, ?, 'sent', NOW())`,
-      [
-        establishmentId,
-        senderId,
-        data.title || null,
-        data.content,
-        messageType,
-        data.priority || 'normal',
-      ]
+      [establishmentId, senderId, data.title || null, data.content, resolvedMessageType, data.priority || 'normal']
     );
 
     const messageId = msgResult.insertId;
-
-    // Insert recipients
     const recipientValues = finalRecipientIds.map((userId) => [messageId, userId, 'pending']);
     await conn.query(
       `INSERT INTO message_recipients (message_id, user_id, delivery_status) VALUES ?`,
       [recipientValues]
     );
 
-    // Insert link_url if provided (stored as attachment with type 'link')
     if (data.link_url) {
       await conn.query<ResultSetHeader>(
         `INSERT INTO message_attachments (message_id, file_name, file_url, file_type) VALUES (?, ?, ?, 'other')`,
@@ -72,11 +83,8 @@ export async function sendMessage(
       );
     }
 
-    // Insert attachments
     if (attachments && attachments.length > 0) {
-      const attachmentValues = attachments.map((a) => [
-        messageId, a.file_name, a.file_url, a.file_type || 'other', a.file_size || null,
-      ]);
+      const attachmentValues = attachments.map((a) => [messageId, a.file_name, a.file_url, a.file_type || 'other', a.file_size || null]);
       await conn.query(
         `INSERT INTO message_attachments (message_id, file_name, file_url, file_type, file_size) VALUES ?`,
         [attachmentValues]
@@ -85,18 +93,12 @@ export async function sendMessage(
 
     await conn.commit();
 
-    // Fire-and-forget push notifications
-    sendBulkPushNotifications(
-      finalRecipientIds,
-      data.title || 'Nouveau message',
-      data.content.substring(0, 100),
-      { messageId: messageId.toString(), type: 'MESSAGE' }
-    ).catch(() => {});
+    sendBulkPushNotifications(finalRecipientIds, data.title || 'Nouveau message', data.content.substring(0, 100), {
+      messageId: messageId.toString(),
+      type: 'MESSAGE',
+    }).catch(() => {});
 
-    return {
-      id: messageId,
-      recipient_count: finalRecipientIds.length,
-    };
+    return { id: messageId, recipient_count: finalRecipientIds.length };
   } catch (err) {
     await conn.rollback();
     throw err;
@@ -108,14 +110,28 @@ export async function sendMessage(
 export async function markAsDelivered(messageId: number, userId: number): Promise<void> {
   const pool = getPool();
   await pool.query(
-    `UPDATE message_recipients SET delivery_status = 'delivered', delivered_at = NOW()
-     WHERE message_id = ? AND user_id = ?`,
+    `UPDATE message_recipients mr
+     JOIN messages m ON m.id = mr.message_id
+     JOIN users u ON u.id = mr.user_id
+     SET mr.delivery_status = 'delivered', mr.delivered_at = NOW()
+     WHERE mr.message_id = ? AND mr.user_id = ? AND m.establishment_id = u.establishment_id`,
     [messageId, userId]
   );
 }
 
-export async function markAsRead(messageId: number, userId: number): Promise<void> {
+export async function markAsRead(messageId: number, userId: number, establishmentId: number): Promise<void> {
   const pool = getPool();
+  const [authorized] = await pool.query<RowDataPacket[]>(
+    `SELECT 1 FROM message_recipients mr
+     JOIN messages m ON m.id = mr.message_id
+     JOIN users u ON u.id = mr.user_id
+     WHERE mr.message_id = ? AND mr.user_id = ?
+       AND m.establishment_id = ? AND u.establishment_id = ?
+     LIMIT 1`,
+    [messageId, userId, establishmentId, establishmentId]
+  );
+  if (authorized.length === 0) throw new Error('Message non trouvé ou accès non autorisé.');
+
   await pool.query(
     `INSERT INTO message_reads (message_id, user_id, read_at) VALUES (?, ?, NOW())
      ON DUPLICATE KEY UPDATE read_at = NOW()`,
@@ -123,11 +139,19 @@ export async function markAsRead(messageId: number, userId: number): Promise<voi
   );
 }
 
-export async function acknowledgeMessage(
-  messageId: number,
-  userId: number
-): Promise<void> {
+export async function acknowledgeMessage(messageId: number, userId: number, establishmentId: number): Promise<void> {
   const pool = getPool();
+  const [authorized] = await pool.query<RowDataPacket[]>(
+    `SELECT 1 FROM message_recipients mr
+     JOIN messages m ON m.id = mr.message_id
+     JOIN users u ON u.id = mr.user_id
+     WHERE mr.message_id = ? AND mr.user_id = ?
+       AND m.establishment_id = ? AND u.establishment_id = ?
+     LIMIT 1`,
+    [messageId, userId, establishmentId, establishmentId]
+  );
+  if (authorized.length === 0) throw new Error('Message non trouvé ou accès non autorisé.');
+
   await pool.query(
     `INSERT INTO message_acknowledgements (message_id, user_id, acknowledged_at) VALUES (?, ?, NOW())
      ON DUPLICATE KEY UPDATE acknowledged_at = NOW()`,
@@ -135,267 +159,158 @@ export async function acknowledgeMessage(
   );
 }
 
-export async function getMessageStatistics(messageId: number): Promise<any> {
+export async function getMessageStatistics(messageId: number, establishmentId: number): Promise<any> {
   const pool = getPool();
-
   const [stats] = await pool.query<RowDataPacket[]>(
-    `SELECT
-       COUNT(*) as total,
+    `SELECT COUNT(*) as total,
        SUM(CASE WHEN mr.delivery_status = 'delivered' THEN 1 ELSE 0 END) as delivered,
        SUM(CASE WHEN mr.delivery_status = 'failed' THEN 1 ELSE 0 END) as failed,
-       (SELECT COUNT(DISTINCT mr2.user_id) FROM message_reads mr2 WHERE mr2.message_id = ?) as read_count,
-       (SELECT COUNT(DISTINCT ma.user_id) FROM message_acknowledgements ma WHERE ma.message_id = ?) as acknowledged_count
+       (SELECT COUNT(DISTINCT mr2.user_id) FROM message_reads mr2 WHERE mr2.message_id = ? AND EXISTS (
+          SELECT 1 FROM messages mx WHERE mx.id = mr2.message_id AND mx.establishment_id = ?
+       )) as read_count,
+       (SELECT COUNT(DISTINCT ma.user_id) FROM message_acknowledgements ma WHERE ma.message_id = ? AND EXISTS (
+          SELECT 1 FROM messages mx WHERE mx.id = ma.message_id AND mx.establishment_id = ?
+       )) as acknowledged_count
      FROM message_recipients mr
-     WHERE mr.message_id = ?`,
-    [messageId, messageId, messageId]
+     JOIN messages m ON m.id = mr.message_id
+     WHERE mr.message_id = ? AND m.establishment_id = ?`,
+    [messageId, establishmentId, messageId, establishmentId, messageId, establishmentId]
   );
 
-  if (stats.length === 0) return { total: 0, delivered: 0, failed: 0, read_count: 0, acknowledged_count: 0 };
+  if (stats.length === 0 || Number(stats[0].total) === 0) return { total: 0, delivered: 0, failed: 0, read_count: 0, acknowledged_count: 0, read_rate: 0 };
   const row = stats[0];
   const total = Number(row.total) || 0;
-  return {
-    total,
-    delivered: Number(row.delivered) || 0,
-    failed: Number(row.failed) || 0,
-    read_count: Number(row.read_count) || 0,
-    acknowledged_count: Number(row.acknowledged_count) || 0,
-    read_rate: total > 0 ? Math.round(((Number(row.read_count) || 0) / total) * 100) : 0,
-  };
+  const readCount = Number(row.read_count) || 0;
+  return { total, delivered: Number(row.delivered) || 0, failed: Number(row.failed) || 0, read_count: readCount, acknowledged_count: Number(row.acknowledged_count) || 0, read_rate: total > 0 ? Math.round((readCount / total) * 100) : 0 };
 }
 
-export async function getMessages(
-  userId: number,
-  role: string,
-  options: PaginationOptions & { status?: string; class_id?: number; priority?: string }
-): Promise<PaginationResult> {
+export async function getMessages(userId: number, role: string, options: PaginationOptions & { status?: string; class_id?: number; priority?: string }): Promise<PaginationResult> {
   const pool = getPool();
   const page = Math.max(1, options.page || 1);
   const limit = Math.min(100, Math.max(1, options.limit || 20));
   const offset = (page - 1) * limit;
 
-  if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
-    // Admin: show messages sent by this establishment
-    return getAdminMessages(userId, options, page, limit, offset);
-  }
+  if (role === 'ADMIN' || role === 'SUPER_ADMIN') return getAdminMessages(userId, options, page, limit, offset);
 
-  // Non-admin: show messages where user is a recipient
   const [countRows] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) as total
-     FROM message_recipients mr
-     JOIN messages m ON m.id = mr.message_id
-     WHERE mr.user_id = ? AND m.status = 'sent'`,
-    [userId]
+    `SELECT COUNT(*) as total FROM message_recipients mr JOIN messages m ON m.id = mr.message_id
+     JOIN users u ON u.id = mr.user_id
+     WHERE mr.user_id = ? AND u.establishment_id = m.establishment_id AND m.status = 'sent'`, [userId]
   );
   const total = countRows[0].total as number;
   const totalPages = Math.ceil(total / limit);
 
   const [messages] = await pool.query<RowDataPacket[]>(
     `SELECT m.*,
-            (SELECT COUNT(*) FROM message_reads mr2 WHERE mr2.message_id = m.id AND mr2.user_id = ?) as is_read,
-            (SELECT COUNT(*) FROM message_acknowledgements ma WHERE ma.message_id = m.id AND ma.user_id = ?) as is_acknowledged,
-            u.first_name as sender_first_name, u.last_name as sender_last_name
+      (SELECT COUNT(*) FROM message_reads mr2 WHERE mr2.message_id = m.id AND mr2.user_id = ?) as is_read,
+      (SELECT COUNT(*) FROM message_acknowledgements ma WHERE ma.message_id = m.id AND ma.user_id = ?) as is_acknowledged,
+      u.first_name as sender_first_name, u.last_name as sender_last_name
      FROM messages m
      JOIN message_recipients mr ON mr.message_id = m.id
+     JOIN users recipient ON recipient.id = mr.user_id
      LEFT JOIN users u ON u.id = m.sender_id
-     WHERE mr.user_id = ? AND m.status = 'sent'
-     GROUP BY m.id
-     ORDER BY m.sent_at DESC
-     LIMIT ? OFFSET ?`,
+     WHERE mr.user_id = ? AND recipient.establishment_id = m.establishment_id AND m.status = 'sent'
+     GROUP BY m.id ORDER BY m.sent_at DESC LIMIT ? OFFSET ?`,
     [userId, userId, userId, limit, offset]
   );
 
   const messageIds = messages.map((m) => m.id);
   let attachmentMap: Record<number, any[]> = {};
-
   if (messageIds.length > 0) {
     const placeholders = messageIds.map(() => '?').join(',');
-    const [attachments] = await pool.query<RowDataPacket[]>(
-      `SELECT * FROM message_attachments WHERE message_id IN (${placeholders})`,
-      messageIds
-    );
+    const [attachments] = await pool.query<RowDataPacket[]>(`SELECT * FROM message_attachments WHERE message_id IN (${placeholders})`, messageIds);
     for (const att of attachments) {
       if (!attachmentMap[att.message_id]) attachmentMap[att.message_id] = [];
       attachmentMap[att.message_id].push(att);
     }
   }
 
-  const data = messages.map((m) => ({
-    ...m,
-    is_read: Number(m.is_read) > 0,
-    is_acknowledged: Number(m.is_acknowledged) > 0,
-    attachments: attachmentMap[m.id] || [],
-  }));
-
+  const data = messages.map((m) => ({ ...m, is_read: Number(m.is_read) > 0, is_acknowledged: Number(m.is_acknowledged) > 0, attachments: attachmentMap[m.id] || [] }));
   return { data, total, page, limit, totalPages };
 }
 
-async function getAdminMessages(
-  userId: number,
-  options: any,
-  page: number,
-  limit: number,
-  offset: number
-): Promise<PaginationResult> {
+async function getAdminMessages(userId: number, options: any, page: number, limit: number, offset: number): Promise<PaginationResult> {
   const pool = getPool();
   const conditions: string[] = ['m.establishment_id = (SELECT establishment_id FROM users WHERE id = ?)'];
   const params: any[] = [userId];
-
-  if (options.status) {
-    conditions.push('m.status = ?');
-    params.push(options.status);
-  }
-  if (options.priority) {
-    conditions.push('m.priority = ?');
-    params.push(options.priority);
-  }
+  if (options.status) { conditions.push('m.status = ?'); params.push(options.status); }
+  if (options.priority) { conditions.push('m.priority = ?'); params.push(options.priority); }
   if (options.class_id) {
-    conditions.push(`m.id IN (
-      SELECT mr.message_id FROM message_recipients mr
-      JOIN students s ON s.user_id = mr.user_id
-      WHERE s.class_id = ?
-    )`);
+    conditions.push(`m.id IN (SELECT mr.message_id FROM message_recipients mr JOIN students s ON s.user_id = mr.user_id WHERE s.class_id = ? AND s.establishment_id = m.establishment_id)`);
     params.push(options.class_id);
   }
-
   const whereClause = 'WHERE ' + conditions.join(' AND ');
-
-  const [countRows] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) as total FROM messages m ${whereClause}`,
-    params
-  );
+  const [countRows] = await pool.query<RowDataPacket[]>(`SELECT COUNT(*) as total FROM messages m ${whereClause}`, params);
   const total = countRows[0].total as number;
   const totalPages = Math.ceil(total / limit);
-
   const [messages] = await pool.query<RowDataPacket[]>(
-    `SELECT m.*,
-            (SELECT COUNT(*) FROM message_recipients WHERE message_id = m.id) as recipient_count,
+    `SELECT m.*, (SELECT COUNT(*) FROM message_recipients WHERE message_id = m.id) as recipient_count,
             u.first_name as sender_first_name, u.last_name as sender_last_name
-     FROM messages m
-     LEFT JOIN users u ON u.id = m.sender_id
-     ${whereClause}
-     ORDER BY m.sent_at DESC
-     LIMIT ? OFFSET ?`,
-    [...params, limit, offset]
+     FROM messages m LEFT JOIN users u ON u.id = m.sender_id ${whereClause}
+     ORDER BY m.sent_at DESC LIMIT ? OFFSET ?`, [...params, limit, offset]
   );
-
   return { data: messages, total, page, limit, totalPages };
 }
 
-export async function getMessageById(messageId: number, userId: number, role: string): Promise<any> {
+export async function getMessageById(messageId: number, userId: number, role: string, establishmentId: number): Promise<any> {
   const pool = getPool();
-
   let query: string;
   let params: any[];
-
   if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
-    query = `SELECT m.*, u.first_name as sender_first_name, u.last_name as sender_last_name
-             FROM messages m
-             LEFT JOIN users u ON u.id = m.sender_id
-             WHERE m.id = ?`;
-    params = [messageId];
+    query = `SELECT m.*, u.first_name as sender_first_name, u.last_name as sender_last_name FROM messages m
+             LEFT JOIN users u ON u.id = m.sender_id WHERE m.id = ? AND m.establishment_id = ?`;
+    params = [messageId, establishmentId];
   } else {
-    query = `SELECT m.*,
-                   (SELECT COUNT(*) FROM message_reads mr2 WHERE mr2.message_id = m.id AND mr2.user_id = ?) as is_read,
-                   (SELECT COUNT(*) FROM message_acknowledgements ma WHERE ma.message_id = m.id AND ma.user_id = ?) as is_acknowledged,
-                   u.first_name as sender_first_name, u.last_name as sender_last_name
-             FROM messages m
-             JOIN message_recipients mr ON mr.message_id = m.id AND mr.user_id = ?
-             LEFT JOIN users u ON u.id = m.sender_id
-             WHERE m.id = ?`;
-    params = [userId, userId, userId, messageId];
+    query = `SELECT m.*, (SELECT COUNT(*) FROM message_reads mr2 WHERE mr2.message_id = m.id AND mr2.user_id = ?) as is_read,
+             (SELECT COUNT(*) FROM message_acknowledgements ma WHERE ma.message_id = m.id AND ma.user_id = ?) as is_acknowledged,
+             u.first_name as sender_first_name, u.last_name as sender_last_name
+             FROM messages m JOIN message_recipients mr ON mr.message_id = m.id AND mr.user_id = ?
+             JOIN users recipient ON recipient.id = mr.user_id LEFT JOIN users u ON u.id = m.sender_id
+             WHERE m.id = ? AND m.establishment_id = ? AND recipient.establishment_id = ?`;
+    params = [userId, userId, userId, messageId, establishmentId, establishmentId];
   }
-
   const [messages] = await pool.query<RowDataPacket[]>(query, params);
   if (messages.length === 0) return null;
-
   const message = messages[0];
-
-  const [attachments] = await pool.query<RowDataPacket[]>(
-    'SELECT * FROM message_attachments WHERE message_id = ?',
-    [messageId]
-  );
-
+  const [attachments] = await pool.query<RowDataPacket[]>('SELECT * FROM message_attachments WHERE message_id = ?', [messageId]);
   const [recipients] = await pool.query<RowDataPacket[]>(
-    `SELECT mr.id, mr.user_id, mr.delivery_status, mr.delivered_at,
-            u.first_name, u.last_name, u.matricule
-     FROM message_recipients mr
-     LEFT JOIN users u ON u.id = mr.user_id
-     WHERE mr.message_id = ?
-     ORDER BY mr.created_at`,
-    [messageId]
+    `SELECT mr.id, mr.user_id, mr.delivery_status, mr.delivered_at, u.first_name, u.last_name, u.matricule
+     FROM message_recipients mr LEFT JOIN users u ON u.id = mr.user_id WHERE mr.message_id = ? ORDER BY mr.created_at`, [messageId]
   );
-
-  return {
-    ...message,
-    is_read: Number(message.is_read) > 0,
-    is_acknowledged: Number(message.is_acknowledged) > 0,
-    attachments,
-    recipients,
-  };
+  return { ...message, is_read: Number(message.is_read) > 0, is_acknowledged: Number(message.is_acknowledged) > 0, attachments, recipients };
 }
 
 export async function getUnreadCount(userId: number): Promise<number> {
   const pool = getPool();
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) as count
-     FROM message_recipients mr
-     JOIN messages m ON m.id = mr.message_id
-     LEFT JOIN message_reads mr2 ON mr2.message_id = m.id AND mr2.user_id = ?
-     WHERE mr.user_id = ? AND m.status = 'sent' AND mr2.id IS NULL`,
-    [userId, userId]
+    `SELECT COUNT(*) as count FROM message_recipients mr JOIN messages m ON m.id = mr.message_id
+     JOIN users u ON u.id = mr.user_id LEFT JOIN message_reads mr2 ON mr2.message_id = m.id AND mr2.user_id = ?
+     WHERE mr.user_id = ? AND u.establishment_id = m.establishment_id AND m.status = 'sent' AND mr2.id IS NULL`, [userId, userId]
   );
   return Number(rows[0]?.count) || 0;
 }
 
-export async function getMessageHistory(
-  establishmentId: number,
-  filters: { date_from?: string; date_to?: string; class_id?: number; priority?: string; status?: string },
-  pagination: PaginationOptions
-): Promise<PaginationResult> {
+export async function getMessageHistory(establishmentId: number, filters: { date_from?: string; date_to?: string; class_id?: number; priority?: string; status?: string }, pagination: PaginationOptions): Promise<PaginationResult> {
   const pool = getPool();
   const page = Math.max(1, pagination.page || 1);
   const limit = Math.min(100, Math.max(1, pagination.limit || 20));
   const offset = (page - 1) * limit;
-
   const conditions: string[] = ['m.establishment_id = ?'];
   const params: any[] = [establishmentId];
-
-  if (filters.date_from) {
-    conditions.push('m.sent_at >= ?');
-    params.push(filters.date_from);
+  if (filters.date_from) { conditions.push('m.sent_at >= ?'); params.push(filters.date_from); }
+  if (filters.date_to) { conditions.push('m.sent_at <= ?'); params.push(filters.date_to + ' 23:59:59'); }
+  if (filters.priority) { conditions.push('m.priority = ?'); params.push(filters.priority); }
+  if (filters.status) { conditions.push('m.status = ?'); params.push(filters.status); }
+  if (filters.class_id) {
+    conditions.push(`m.id IN (SELECT mr.message_id FROM message_recipients mr JOIN students s ON s.user_id = mr.user_id WHERE s.class_id = ? AND s.establishment_id = m.establishment_id)`);
+    params.push(filters.class_id);
   }
-  if (filters.date_to) {
-    conditions.push('m.sent_at <= ?');
-    params.push(filters.date_to + ' 23:59:59');
-  }
-  if (filters.priority) {
-    conditions.push('m.priority = ?');
-    params.push(filters.priority);
-  }
-  if (filters.status) {
-    conditions.push('m.status = ?');
-    params.push(filters.status);
-  }
-
   const whereClause = 'WHERE ' + conditions.join(' AND ');
-
-  const [countRows] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) as total FROM messages m ${whereClause}`,
-    params
-  );
+  const [countRows] = await pool.query<RowDataPacket[]>(`SELECT COUNT(*) as total FROM messages m ${whereClause}`, params);
   const total = countRows[0].total as number;
   const totalPages = Math.ceil(total / limit);
-
-  const [messages] = await pool.query<RowDataPacket[]>(
-    `SELECT m.*, u.first_name as sender_name, u.last_name as sender_last_name,
-       (SELECT COUNT(*) FROM message_recipients WHERE message_id = m.id) as recipient_count
-     FROM messages m
-     JOIN users u ON u.id = m.sender_id
-     ${whereClause}
-     ORDER BY m.sent_at DESC
-     LIMIT ? OFFSET ?`,
-    [...params, limit, offset]
-  );
-
+  const [messages] = await pool.query<RowDataPacket[]>(`SELECT m.*, u.first_name as sender_name, u.last_name as sender_last_name,
+       (SELECT COUNT(*) FROM message_recipients WHERE message_id = m.id) as recipient_count FROM messages m JOIN users u ON u.id = m.sender_id ${whereClause}
+       ORDER BY m.sent_at DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
   return { data: messages, total, page, limit, totalPages };
 }
