@@ -5,9 +5,24 @@ import { validateBody } from '../middleware/validator.js';
 
 const router = Router();
 
-router.post('/login', authController.login);
-router.post('/otp/request', authController.requestOtp);
-router.post('/otp/verify', authController.verifyOtp);
+const loginSchema = {
+  email: { type: 'string', required: true, maxLength: 255 },
+  password: { type: 'string', required: true, minLength: 1 },
+};
+
+const otpRequestSchema = {
+  matricule: { type: 'string', required: true, maxLength: 50 },
+  phone: { type: 'string', required: true, maxLength: 30 },
+};
+
+const otpVerifySchema = {
+  matricule: { type: 'string', required: true, maxLength: 50 },
+  code: { type: 'string', required: true, pattern: /^[0-9]{6}$/ },
+};
+
+router.post('/login', validateBody(loginSchema), authController.login);
+router.post('/otp/request', validateBody(otpRequestSchema), authController.requestOtp);
+router.post('/otp/verify', validateBody(otpVerifySchema), authController.verifyOtp);
 router.post('/logout', authenticate, authController.logout);
 router.get('/profile', authenticate, authController.getProfile);
 

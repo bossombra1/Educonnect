@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 
-const API_URL = Constants.expoConfig?.extra?.apiUrl ?? 'http://localhost:3000/api';
+const API_URL = (Constants.expoConfig?.extra?.apiUrl ?? 'http://localhost:3000/api').replace(/\/$/, '');
 
 export const apiClient = axios.create({
   baseURL: API_URL,
