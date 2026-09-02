@@ -20,7 +20,7 @@ async function start() {
 
   startScheduler();
 
-  const server = app.listen(env.api.port, () => {
+  const server = app.listen(env.api.port, '0.0.0.0', () => {
     console.log('');
     console.log('============================================');
     console.log(`  EduConnect API Server`);
@@ -28,6 +28,7 @@ async function start() {
     console.log(`  Port: ${env.api.port}`);
     console.log(`  Database: ${env.mysql.host}:${env.mysql.port}/${env.mysql.database}`);
     console.log(`  API URL: http://localhost:${env.api.port}/api`);
+    console.log(`  Network API URL: http://<PC-IP>:${env.api.port}/api`);
     console.log('============================================');
     console.log('');
   });
