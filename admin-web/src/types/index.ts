@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'STAFF' | 'TEACHER' | 'PARENT' | 'STUDENT';
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'PARENT' | 'STUDENT' | 'STAFF';
 
 export type MessagePriority = 'normal' | 'important' | 'urgent';
 
@@ -37,7 +37,7 @@ export interface Parent extends User {
 }
 
 export interface Staff extends User {
-  role: 'STAFF' | 'TEACHER';
+  role: 'STAFF';
   fonction?: string;
   departement?: string;
 }
