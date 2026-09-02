@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { getPool } from '../config/database.js';
 import { env } from '../config/env.js';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { RowDataPacket } from 'mysql2/promise';
 import { JwtPayload } from '../types/index.js';
 
