@@ -6,6 +6,8 @@ import { requireAdmin } from '../middleware/rbac.js';
 const router = Router();
 
 router.get('/dashboard', authenticate, requireAdmin(), statisticsController.getDashboard);
-router.get('/messages', authenticate, requireAdmin(), statisticsController.getExportStats);
+router.get('/messages', authenticate, requireAdmin(), statisticsController.getMessageStats);
+router.get('/messages/:id', authenticate, requireAdmin(), statisticsController.getMessageStatsById);
+router.get('/export', authenticate, requireAdmin(), statisticsController.getExportStats);
 
 export default router;
