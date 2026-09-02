@@ -11,12 +11,15 @@ const loginSchema = {
 };
 
 const otpRequestSchema = {
-  matricule: { type: 'string', required: true, maxLength: 50 },
-  phone: { type: 'string', required: true, maxLength: 30 },
+  phone: { type: 'string', required: true, minLength: 8, maxLength: 30 },
+  matricule: { type: 'string', required: false, maxLength: 50 },
+  childMatricule: { type: 'string', required: false, maxLength: 50 },
 };
 
 const otpVerifySchema = {
-  matricule: { type: 'string', required: true, maxLength: 50 },
+  phone: { type: 'string', required: true, minLength: 8, maxLength: 30 },
+  matricule: { type: 'string', required: false, maxLength: 50 },
+  childMatricule: { type: 'string', required: false, maxLength: 50 },
   code: { type: 'string', required: true, pattern: /^[0-9]{6}$/ },
 };
 
