@@ -3,6 +3,16 @@ import { getPool } from '../config/database.js';
 import bcrypt from 'bcryptjs';
 import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 
+async function generateUniqueMatricule(prefix: string): Promise<string> {
+  const pool = getPool();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const candidate = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000000).toString().padStart(6, '0')}`;
+    const [rows] = await pool.query<RowDataPacket[]>('SELECT id FROM users WHERE matricule = ? LIMIT 1', [candidate]);
+    if (!rows.length) return candidate;
+  }
+  throw new Error('Impossible de générer un matricule unique. Veuillez réessayer.');
+}
+
 export async function getAllUsers(req: Request, res: Response): Promise<void> {
   try {
     const user = req.user as any;
@@ -39,11 +49,13 @@ export async function getAllUsers(req: Request, res: Response): Promise<void> {
       `SELECT u.id, u.first_name, u.last_name, u.matricule, u.email, u.phone, u.is_active, u.avatar_url, u.created_at,
               r.name AS role_name, r.label AS role_label,
               s.id AS student_id, s.matricule_scolaire, s.status AS student_status,
-              c.id AS class_id, c.name AS class_name
+              c.id AS class_id, c.name AS class_name,
+              st.id AS staff_id, st.role_title, st.department
        FROM users u
        JOIN roles r ON r.id = u.role_id
        LEFT JOIN students s ON s.user_id = u.id AND s.establishment_id = u.establishment_id
        LEFT JOIN classes c ON c.id = s.class_id AND c.establishment_id = u.establishment_id
+       LEFT JOIN staff st ON st.user_id = u.id AND st.establishment_id = u.establishment_id
        ${whereClause}
        GROUP BY u.id ORDER BY u.created_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
@@ -57,7 +69,7 @@ export async function getUserById(req: Request, res: Response): Promise<void> {
     const userId = parseInt(req.params.id); const user = req.user as any;
     if (isNaN(userId)) { res.status(400).json({ success: false, error: 'ID utilisateur invalide.' }); return; }
     const pool = getPool();
-    const [users] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, u.email, u.phone, u.is_active, u.avatar_url, u.establishment_id, u.created_at, u.updated_at, r.name AS role_name, r.label AS role_label FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ? AND u.establishment_id = ?`, [userId, user.establishmentId]);
+    const [users] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, u.email, u.phone, u.is_active, u.avatar_url, u.establishment_id, u.created_at, u.updated_at, r.name AS role_name, r.label AS role_label, st.id AS staff_id, st.role_title, st.department FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN staff st ON st.user_id = u.id AND st.establishment_id = u.establishment_id WHERE u.id = ? AND u.establishment_id = ?`, [userId, user.establishmentId]);
     if (!users.length) { res.status(404).json({ success: false, error: 'Utilisateur non trouvé.' }); return; }
     res.status(200).json({ success: true, data: users[0] });
   } catch (err) { res.status(500).json({ success: false, error: (err as Error).message }); }
@@ -89,9 +101,13 @@ export async function createUser(req: Request, res: Response): Promise<void> {
     }
     if (!roles.length) { res.status(400).json({ success: false, error: 'Rôle non trouvé.' }); return; }
     const resolvedRoleId = Number(roles[0].id); const roleName = String(roles[0].name).toUpperCase();
+    if (!['STUDENT', 'PARENT', 'STAFF'].includes(roleName)) {
+      res.status(400).json({ success: false, error: `Le rôle métier ${roleName} n'est pas supporté par ce module.` }); return;
+    }
 
-    let matricule = body.matricule;
-    if (!matricule && roleName === 'PARENT') matricule = `PAR-${Date.now()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+    let matricule = typeof body.matricule === 'string' ? body.matricule.trim() : body.matricule;
+    if (!matricule && roleName === 'PARENT') matricule = await generateUniqueMatricule('PAR');
+    if (!matricule && roleName === 'STAFF') matricule = await generateUniqueMatricule('STF');
     if (!matricule) { res.status(400).json({ success: false, error: 'Le matricule est requis.' }); return; }
 
     const hashedPassword = await bcrypt.hash(password || matricule, 10);
@@ -125,7 +141,7 @@ export async function createUser(req: Request, res: Response): Promise<void> {
         await conn.query<ResultSetHeader>(`INSERT INTO staff (user_id, establishment_id, role_title, department) VALUES (?, ?, ?, ?)`, [newUserId, user.establishmentId, roleTitle, body.department || null]);
       }
       await conn.commit();
-      const [newUser] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, u.email, u.phone, u.is_active, r.name AS role_name, r.label AS role_label FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ? AND u.establishment_id = ?`, [newUserId, user.establishmentId]);
+      const [newUser] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, u.email, u.phone, u.is_active, r.name AS role_name, r.label AS role_label, st.role_title, st.department FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN staff st ON st.user_id = u.id AND st.establishment_id = u.establishment_id WHERE u.id = ? AND u.establishment_id = ?`, [newUserId, user.establishmentId]);
       res.status(201).json({ success: true, data: newUser[0], message: 'Utilisateur créé avec succès.' });
     } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
   } catch (err) {
@@ -140,23 +156,57 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
     if (isNaN(userId)) { res.status(400).json({ success: false, error: 'ID utilisateur invalide.' }); return; }
     const body = req.body || {};
     const firstName = body.first_name ?? body.firstName; const lastName = body.last_name ?? body.lastName;
-    const email = body.email; const matricule = body.matricule; const phone = body.phone; const isActive = body.is_active ?? body.isActive;
+    const email = body.email; const matriculeInput = body.matricule; const phone = body.phone; const isActive = body.is_active ?? body.isActive;
+    const roleTitle = body.role_title ?? body.roleTitle; const department = body.department;
     const pool = getPool();
-    const [users] = await pool.query<RowDataPacket[]>('SELECT id FROM users WHERE id = ? AND establishment_id = ?', [userId, user.establishmentId]);
+    const [users] = await pool.query<RowDataPacket[]>('SELECT u.id, u.matricule, r.name AS role_name, st.id AS staff_id FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN staff st ON st.user_id = u.id AND st.establishment_id = u.establishment_id WHERE u.id = ? AND u.establishment_id = ?', [userId, user.establishmentId]);
     if (!users.length) { res.status(404).json({ success: false, error: 'Utilisateur non trouvé.' }); return; }
+    const current = users[0];
     const fields: string[] = []; const params: any[] = [];
     if (firstName !== undefined) { fields.push('first_name = ?'); params.push(firstName); }
     if (lastName !== undefined) { fields.push('last_name = ?'); params.push(lastName); }
     if (email !== undefined) { fields.push('email = ?'); params.push(email); }
-    if (matricule !== undefined) { fields.push('matricule = ?'); params.push(matricule); }
+    if (matriculeInput !== undefined && String(matriculeInput).trim() !== '') { fields.push('matricule = ?'); params.push(String(matriculeInput).trim()); }
     if (phone !== undefined) { fields.push('phone = ?'); params.push(phone); }
     if (isActive !== undefined) { fields.push('is_active = ?'); params.push(isActive ? 1 : 0); }
-    if (!fields.length) { res.status(400).json({ success: false, error: 'Aucun champ à mettre à jour.' }); return; }
-    params.push(userId, user.establishmentId);
-    await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ? AND establishment_id = ?`, params);
-    const [updated] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, u.email, u.phone, u.is_active, r.name AS role_name, r.label AS role_label FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ? AND u.establishment_id = ?`, [userId, user.establishmentId]);
+    if (matriculeInput !== undefined && String(matriculeInput).trim() !== '' && String(matriculeInput).trim() !== String(current.matricule)) {
+      const [existing] = await pool.query<RowDataPacket[]>('SELECT id FROM users WHERE matricule = ? AND id <> ?', [String(matriculeInput).trim(), userId]);
+      if (existing.length) { res.status(409).json({ success: false, error: 'Un utilisateur avec ce matricule existe déjà.' }); return; }
+    }
+
+    const hasStaffFields = roleTitle !== undefined || department !== undefined;
+    if (!fields.length && !hasStaffFields) { res.status(400).json({ success: false, error: 'Aucun champ à mettre à jour.' }); return; }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      if (fields.length) {
+        fields.push('updated_at = CURRENT_TIMESTAMP');
+        params.push(userId, user.establishmentId);
+        await conn.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ? AND establishment_id = ?`, params);
+      }
+      if (hasStaffFields) {
+        if (String(current.role_name).toUpperCase() !== 'STAFF') throw new Error('Les champs role_title et department sont réservés au personnel STAFF.');
+        if (roleTitle !== undefined && !String(roleTitle).trim()) throw new Error('Le champ role_title ne peut pas être vide.');
+        if (current.staff_id) {
+          const staffFields: string[] = []; const staffParams: any[] = [];
+          if (roleTitle !== undefined) { staffFields.push('role_title = ?'); staffParams.push(String(roleTitle).trim()); }
+          if (department !== undefined) { staffFields.push('department = ?'); staffParams.push(department === '' ? null : department); }
+          if (staffFields.length) {
+            staffParams.push(userId, user.establishmentId);
+            await conn.query(`UPDATE staff SET ${staffFields.join(', ')} WHERE user_id = ? AND establishment_id = ?`, staffParams);
+          }
+        } else {
+          if (!roleTitle) throw new Error('Le champ role_title est requis pour créer la fiche STAFF.');
+          await conn.query(`INSERT INTO staff (user_id, establishment_id, role_title, department) VALUES (?, ?, ?, ?)`, [userId, user.establishmentId, String(roleTitle).trim(), department || null]);
+        }
+      }
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
+
+    const [updated] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, u.email, u.phone, u.is_active, r.name AS role_name, r.label AS role_label, st.role_title, st.department FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN staff st ON st.user_id = u.id AND st.establishment_id = u.establishment_id WHERE u.id = ? AND u.establishment_id = ?`, [userId, user.establishmentId]);
     res.status(200).json({ success: true, data: updated[0], message: 'Utilisateur mis à jour.' });
-  } catch (err) { res.status(400).json({ success: false, error: (err as Error).message }); }
+  } catch (err) { const message = (err as Error).message; res.status(message.includes('existe déjà') ? 409 : 400).json({ success: false, error: message }); }
 }
 
 export async function deleteUser(req: Request, res: Response): Promise<void> {
@@ -208,7 +258,7 @@ export async function searchUsers(req: Request, res: Response): Promise<void> {
     const user = req.user as any; const pool = getPool(); const query = String(req.query.q || '').trim(); const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
     if (!query) { res.status(400).json({ success: false, error: 'Le paramètre de recherche (q) est requis.' }); return; }
     const term = `%${query}%`;
-    const [users] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, u.email, u.phone, r.name AS role_name FROM users u JOIN roles r ON r.id = u.role_id WHERE u.establishment_id = ? AND (u.email LIKE ? OR u.matricule LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?) ORDER BY u.last_name, u.first_name LIMIT ?`, [user.establishmentId, term, term, term, term, limit]);
+    const [users] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, u.email, u.phone, r.name AS role_name, st.role_title, st.department FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN staff st ON st.user_id = u.id AND st.establishment_id = u.establishment_id WHERE u.establishment_id = ? AND (u.email LIKE ? OR u.matricule LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?) ORDER BY u.last_name, u.first_name LIMIT ?`, [user.establishmentId, term, term, term, term, limit]);
     res.status(200).json({ success: true, data: users });
   } catch (err) { res.status(500).json({ success: false, error: (err as Error).message }); }
 }
