@@ -6,7 +6,7 @@ EduConnect est une plateforme complète de communication entre les établissemen
 
 | Fonctionnalité | Description |
 |---|---|
-| **Authentification OTP mobile** | Connexion sécurisée des parents via matricule + numéro de téléphone avec code OTP |
+| **Authentification OTP mobile** | Parents : téléphone enregistré ; élèves/personnel : matricule de compte + téléphone, puis code OTP |
 | **Notifications push** | Notifications instantanées via Firebase Cloud Messaging (FCM) |
 | **Mode hors ligne** | Consultation des messages en mode déconnecté avec synchronisation automatique |
 | **Panneau d'administration** | Interface web complète pour gérer l'établissement |
@@ -34,41 +34,11 @@ EduConnect/
 │   │   └── server.ts       # Point d'entrée du serveur
 │   └── package.json
 ├── admin-web/              # Interface d'administration (React + Vite + Tailwind)
-│   ├── src/
-│   │   ├── components/ui/  # Composants UI réutilisables
-│   │   ├── hooks/          # Hooks personnalisés
-│   │   ├── layouts/        # Mise en page
-│   │   ├── pages/          # Pages de l'application
-│   │   ├── routes/         # Configuration des routes
-│   │   ├── services/       # Appels API
-│   │   ├── store/          # Gestion d'état (Zustand)
-│   │   ├── types/          # Types TypeScript
-│   │   └── utils/          # Utilitaires
-│   └── package.json
 ├── mobile/                 # Application mobile (React Native + Expo)
-│   ├── app/                # Routes Expo Router
-│   │   ├── (tabs)/         # Onglets principaux
-│   │   ├── auth/           # Écrans d'authentification
-│   │   ├── messages/       # Détail d'un message
-│   │   ├── settings/       # Paramètres
-│   │   └── children/       # Fiches enfants
-│   ├── src/
-│   │   ├── components/     # Composants partagés et UI
-│   │   ├── hooks/          # Hooks personnalisés
-│   │   ├── notifications/  # Gestion des notifications push
-│   │   ├── services/       # Appels API
-│   │   ├── storage/        # Stockage local et mode hors ligne
-│   │   ├── theme/          # Thème de l'application
-│   │   └── types/          # Types TypeScript
-│   └── package.json
 ├── database/
 │   ├── educonnect.sql      # Structure de la base de données
 │   └── seed.sql            # Données de test
 └── docs/                   # Documentation
-    ├── INSTALLATION.md     # Guide d'installation détaillé
-    ├── DATABASE.md         # Documentation de la base de données
-    ├── API.md              # Documentation de l'API REST
-    └── ARCHITECTURE.md     # Documentation de l'architecture
 ```
 
 ## Stack technique
@@ -83,9 +53,9 @@ EduConnect/
 
 ## Prérequis
 
-- **Node.js 18+** ([https://nodejs.org](https://nodejs.org))
+- **Node.js 18+**
 - **npm** (inclus avec Node.js) ou **yarn**
-- **WAMPServer** avec MySQL ([https://www.wampserver.com](https://www.wampserver.com))
+- **WAMPServer** avec MySQL
 - **Android Studio** (pour la compilation APK) ou **Expo Go** (pour le développement)
 - **Git** (optionnel)
 
@@ -93,27 +63,26 @@ EduConnect/
 
 ### Étape 1 — Base de données
 
-1. Lancez **WAMPServer** (l'icône WAMP dans la barre de tâches doit devenir **verte**)
-2. Ouvrez **phpMyAdmin** dans votre navigateur : [http://localhost/phpmyadmin](http://localhost/phpmyadmin)
-3. Créez une base de données nommée `educonnect` (ou importez directement)
-4. Importez le fichier `database/educonnect.sql` dans phpMyAdmin
-5. Importez également le fichier `database/seed.sql` pour les données de test
+1. Lancez WAMPServer.
+2. Ouvrez phpMyAdmin.
+3. Créez la base `educonnect` ou importez `database/educonnect.sql`.
+4. Appliquez `database/migrations/001_audit_security_and_stats.sql` sur une base existante pour les corrections de sécurité/statistiques.
+5. Importez `database/seed.sql` uniquement pour les données de test.
 
 ### Étape 2 — Backend (API)
 
 ```bash
 cd backend
-copy .env.example .env    # Sous Windows
-# cp .env.example .env       # Sous Linux/Mac
+copy .env.example .env
 npm install
 npm run dev
 ```
 
 Le serveur démarre sur `http://localhost:3000`.
 
-Vérifiez le bon fonctionnement : [http://localhost:3000/api/health](http://localhost:3000/api/health)
+Vérification : `http://localhost:3000/api/health`
 
-### Étape 3 — Interface d'administration (Admin Web)
+### Étape 3 — Interface d'administration
 
 ```bash
 cd admin-web
@@ -121,7 +90,7 @@ npm install
 npm run dev
 ```
 
-L'interface s'ouvre automatiquement dans votre navigateur : [http://localhost:5173](http://localhost:5173)
+L'interface utilise `/api` et le proxy Vite vers le backend local.
 
 ### Étape 4 — Application mobile
 
@@ -131,47 +100,45 @@ npm install
 npx expo start
 ```
 
-1. Installez **Expo Go** sur votre smartphone Android
-2. Scannez le **code QR** affiché dans le terminal
-3. L'application s'ouvre sur votre téléphone
+- Android Emulator : `EXPO_PUBLIC_API_URL=http://10.0.2.2:3000/api`
+- Téléphone physique sur le même Wi-Fi : utilisez l'IPv4 LAN du PC, par exemple `http://192.168.1.20:3000/api`.
+- iOS Simulator : `http://localhost:3000/api` peut être utilisé.
+- Le pare-feu Windows doit autoriser le port 3000 pour un appareil physique.
+
+## Authentification mobile
+
+### Parent
+
+Le parent **n'utilise pas le matricule interne du compte**. Il saisit son numéro de téléphone enregistré par l'établissement. Si plusieurs comptes parents utilisent le même numéro, l'application demande le **matricule scolaire de l'enfant** afin d'identifier le compte sans choisir arbitrairement.
+
+Après vérification de l'OTP, le backend délivre un JWT et retourne le profil du parent ainsi que ses enfants liés via `parent_student`.
+
+### Élève / Personnel
+
+L'élève ou le membre du personnel utilise le **matricule du compte `users.matricule` + téléphone**, puis saisit le code OTP.
+
+> `users.matricule` et `students.matricule_scolaire` sont deux identifiants différents. Le second sert notamment à identifier un enfant lorsqu'un numéro de parent est partagé.
+
+### Sécurité OTP
+
+- OTP généré aléatoirement côté serveur.
+- OTP stocké sous forme de hash bcrypt, jamais en clair.
+- Expiration après 10 minutes.
+- Invalidation après utilisation.
+- Maximum de 5 tentatives par code.
+- Limitation des demandes et vérifications par adresse IP.
+- Délai minimal entre deux demandes pour un même compte.
+- Aucun OTP ne doit être écrit dans les logs.
+
+L'envoi SMS réel reste à connecter à un fournisseur SMS : la fonction backend actuelle prépare et sécurise le code mais ne simule pas un SMS réussi.
 
 ## Comptes de test
 
-Les comptes suivants sont créés par le fichier `database/seed.sql` :
+Les comptes de test sont créés par `database/seed.sql`.
 
-| Rôle | Identifiant | Mot de passe | Notes |
-|---|---|---|---|
-| **Super Admin** | `directeur@lareussite.ci` | `Admin@2026` | Accès complet à toutes les fonctionnalités |
-| **Admin** | `secretariat@lareussite.ci` | `Admin@2026` | Accès à la plupart des fonctionnalités |
-| **Parent (mobile)** | Matricule : `PAR-001` | — | Téléphone : `+2250700000010` |
-
-> **Note pour l'authentification mobile** : Le code OTP est affiché dans la **console du backend** (terminal où tourne `npm run dev`). Saisissez ce code dans l'application mobile pour vous connecter.
-
-## Compilation APK
-
-Pour générer un fichier APK de prévisualisation :
-
-```bash
-cd mobile
-eas build --platform android --profile preview
-```
-
-> **Prérequis** : Installez EAS CLI avec `npm install -g eas-cli` et connectez-vous avec `eas login`.
-
-## Configuration Firebase (notifications push)
-
-Firebase est **optionnel** mais nécessaire pour les notifications push.
-
-1. Créez un projet sur [console.firebase.google.com](https://console.firebase.google.com)
-2. Activez **Cloud Messaging**
-3. Téléchargez `google-services.json` et placez-le à la racine de `mobile/`
-4. Téléchargez `GoogleService-Info.plist` et placez-le dans `mobile/ios/`
-5. Mettez à jour la configuration dans `mobile/src/notifications/`
-6. Mettez à jour le fichier `backend/.env` avec les clés du compte de service Firebase
+> Pour l'OTP, ne considérez jamais une valeur de démonstration comme un SMS réellement envoyé. Configurez un fournisseur SMS avant une utilisation réelle.
 
 ## Variables d'environnement
-
-Le fichier `backend/.env` contient les variables suivantes :
 
 | Variable | Description | Valeur par défaut |
 |---|---|---|
@@ -182,49 +149,49 @@ Le fichier `backend/.env` contient les variables suivantes :
 | `DB_USER` | Utilisateur MySQL | `root` |
 | `DB_PASSWORD` | Mot de passe MySQL | *(vide avec WAMP)* |
 | `DB_NAME` | Nom de la base de données | `educonnect` |
-| `JWT_SECRET` | Clé secrète pour les tokens JWT | *(à générer)* |
-| `JWT_EXPIRES_IN` | Durée de vie des tokens JWT | `24h` |
-| `FIREBASE_PROJECT_ID` | Identifiant du projet Firebase | — |
+| `JWT_SECRET` | Clé secrète JWT | *(à générer)* |
+| `JWT_EXPIRES_IN` | Durée de vie JWT | `24h` |
+| `FIREBASE_PROJECT_ID` | Identifiant Firebase | — |
 | `FIREBASE_PRIVATE_KEY` | Clé privée Firebase | — |
-| `FIREBASE_CLIENT_EMAIL` | Email du compte de service Firebase | — |
-| `UPLOAD_DIR` | Répertoire des fichiers uploadés | `./uploads` |
+| `FIREBASE_CLIENT_EMAIL` | Compte de service Firebase | — |
+| `UPLOAD_DIR` | Répertoire des fichiers | `./uploads` |
+| `EXPO_PUBLIC_API_URL` | URL API utilisée par Expo | `http://10.0.2.2:3000/api` |
 
 ## Dépannage
 
-### L'icône WAMP reste orange ou rouge
-- Vérifiez que le port **80** n'est pas utilisé par un autre service (Skype, IIS, etc.)
-- Redémarrez WAMPServer
-- Vérifiez les logs dans `WAMPServer/logs/`
+### L'application mobile affiche `Network Error`
+
+1. Vérifiez que le backend répond sur `http://localhost:3000/api/health` depuis le PC.
+2. Sur Android Emulator, utilisez `10.0.2.2` au lieu de `localhost`.
+3. Sur un téléphone physique, utilisez l'IPv4 LAN du PC et assurez-vous que le téléphone et le PC sont sur le même réseau.
+4. Autorisez le port 3000 dans le pare-feu Windows si nécessaire.
+5. Redémarrez Expo après avoir changé `EXPO_PUBLIC_API_URL`.
 
 ### Erreur `ECONNREFUSED` lors de la connexion à MySQL
-- Vérifiez que WAMPServer est bien lancé (icône verte)
-- Vérifiez les paramètres de connexion dans `backend/.env` :
-  - `DB_HOST=localhost`
-  - `DB_PORT=3306`
-  - `DB_USER=root`
-  - `DB_PASSWORD=` *(vide)*
 
-### Erreur `npm install` échoue
-- Supprimez `node_modules` et `package-lock.json`, puis relancez `npm install`
-- Vérifiez que vous utilisez **Node.js 18+** : `node -v`
+- Vérifiez que WAMPServer est démarré.
+- Vérifiez `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` et `DB_NAME` dans `backend/.env`.
 
-### L'application mobile ne se connecte pas au backend
-- Vérifiez que le backend tourne bien sur `http://localhost:3000`
-- Sur un appareil physique, remplacez `localhost` par l'**adresse IP locale** de votre ordinateur dans la configuration API du mobile
-- Vérifiez que votre pare-feu n' bloque pas le port 3000
+### Erreur `npm install`
 
-### Le code OTP n'arrive pas (pas de SMS)
-- En mode développement, l'OTP est **affiché dans la console du backend**, pas envoyé par SMS
-- Vérifiez la configuration Twilio/Firebase dans le fichier `.env` pour l'envoi réel de SMS
+- Vérifiez Node.js 18+.
+- Réinstallez les dépendances avec `npm install` si nécessaire.
 
-### Notifications push ne fonctionnent pas
-- Vérifiez que `google-services.json` est bien placé dans `mobile/`
-- Vérifiez que les clés Firebase sont configurées dans `backend/.env`
-- Vérifiez que les notifications sont autorisées sur l'appareil mobile
+### Le code OTP n'arrive pas
+
+Le backend ne doit pas prétendre qu'un SMS a été envoyé tant qu'un fournisseur SMS réel n'est pas configuré. Vérifiez la configuration et l'intégration du fournisseur SMS avant les tests de production.
+
+### Notifications push
+
+- Vérifiez `google-services.json` dans `mobile/`.
+- Vérifiez les clés Firebase dans `backend/.env`.
+- Vérifiez les permissions de notification sur l'appareil.
 
 ### Erreur de CORS dans le navigateur
-- Le backend inclut déjà la gestion des CORS
-- Vérifiez que l'URL de l'API dans `admin-web/src/services/api.ts` est correcte
+
+- L'API configure CORS.
+- L'Admin Web utilise `/api` avec le proxy Vite.
+- Vérifiez que le backend est bien démarré sur le port 3000.
 
 ## Licence
 
