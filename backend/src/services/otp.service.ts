@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { getPool } from '../config/database.js';
 import { env } from '../config/env.js';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
 import { RowDataPacket } from 'mysql2/promise';
 import { JwtPayload } from '../types/index.js';
 
@@ -31,15 +32,15 @@ export async function requestOtp(matricule: string, phone: string): Promise<{ me
   }
 
   const otp = generateOtp();
+  const otpHash = await bcrypt.hash(otp, 10);
 
   await pool.query(
-    `UPDATE users SET otp_code = ?, otp_expires_at = DATE_ADD(NOW(), INTERVAL 10 MINUTE)
-     WHERE matricule = ? AND phone = ?`,
-    [otp, matricule, phone]
+    `UPDATE users SET otp_code = ?, otp_expires_at = DATE_ADD(NOW(), INTERVAL 10 MINUTE), otp_verified = FALSE
+     WHERE id = ?`,
+    [otpHash, user.id]
   );
 
-  console.log(`[OTP] Code for matricule ${matricule}: ${otp}`);
-
+  // TODO: intégrer ici le fournisseur SMS réel. Le code OTP ne doit jamais être écrit dans les logs.
   return { message: 'Code OTP envoyé avec succès.' };
 }
 
@@ -65,6 +66,10 @@ export async function verifyOtp(
 
   const user = users[0];
 
+  if (!user.is_active) {
+    throw new Error('Compte inactif.');
+  }
+
   if (!user.otp_code || !user.otp_expires_at) {
     throw new Error("Aucun code OTP en attente. Veuillez d'abord demander un code.");
   }
@@ -72,22 +77,21 @@ export async function verifyOtp(
   const now = new Date();
   const expiresAt = new Date(user.otp_expires_at);
   if (now > expiresAt) {
+    await pool.query(
+      'UPDATE users SET otp_code = NULL, otp_expires_at = NULL, otp_verified = FALSE WHERE id = ?',
+      [user.id]
+    );
     throw new Error('Le code OTP a expiré. Veuillez demander un nouveau code.');
   }
 
-  // Direct comparison since OTP is stored in plain text (not hashed)
-  if (code !== user.otp_code) {
+  const isValid = await bcrypt.compare(code, user.otp_code);
+  if (!isValid) {
     throw new Error('Code OTP invalide.');
   }
 
   await pool.query(
-    `UPDATE users SET otp_code = NULL, otp_expires_at = NULL, otp_verified = TRUE WHERE id = ?`,
-    [user.id]
-  );
-
-  // Update last_login_at
-  await pool.query(
-    'UPDATE users SET last_login_at = NOW() WHERE id = ?',
+    `UPDATE users SET otp_code = NULL, otp_expires_at = NULL, otp_verified = TRUE,
+            last_login_at = NOW() WHERE id = ?`,
     [user.id]
   );
 
@@ -110,7 +114,6 @@ export async function verifyOtp(
     establishment_id: user.establishment_id,
   };
 
-  // Audit log
   await pool.query(
     'INSERT INTO audit_logs (user_id, action, entity_type, created_at) VALUES (?, ?, ?, NOW())',
     [user.id, 'LOGIN_OTP', 'USER']
