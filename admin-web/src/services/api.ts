@@ -8,9 +8,7 @@ const apiClient = axios.create({
 
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -22,7 +20,7 @@ apiClient.interceptors.response.use(
       localStorage.removeItem('user');
       window.location.href = '/login';
     }
-    const message = error.response?.data?.message || 'Une erreur est survenue';
+    const message = error.response?.data?.error || error.response?.data?.message || 'Une erreur est survenue';
     toast.error(message);
     return Promise.reject(error);
   }
