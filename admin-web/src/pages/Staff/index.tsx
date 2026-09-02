@@ -17,8 +17,7 @@ const emptyForm = { firstName: '', lastName: '', email: '', phone: '', role: 'ST
 type FormData = typeof emptyForm;
 
 const roleOptions = [
-  { value: 'STAFF', label: 'Personnel administratif' },
-  { value: 'TEACHER', label: 'Enseignant' },
+  { value: 'STAFF', label: 'Personnel' },
 ];
 
 export default function StaffPage() {
@@ -38,24 +37,23 @@ export default function StaffPage() {
   const fetchStaff = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string | number> = { page: pagination.page, limit: 20 };
-      if (roleFilter) params.role = roleFilter;
+      const params: Record<string, string | number> = { page: pagination.page, limit: 20, role: 'STAFF' };
       if (search) params.search = search;
       const res = await userService.getUsers(params as any);
-      setStaff(res.data.filter((u) => u.role === 'STAFF' || u.role === 'TEACHER'));
+      setStaff(res.data.filter((u) => u.role === 'STAFF'));
       setPagination({ page: res.pagination.page, totalPages: res.pagination.totalPages, total: res.pagination.total });
     } catch (error) {
       setStaff([]);
       toast.error(error instanceof Error ? error.message : 'Impossible de charger le personnel');
     } finally { setLoading(false); }
-  }, [pagination.page, search, roleFilter]);
+  }, [pagination.page, search]);
 
   useEffect(() => { fetchStaff(); }, [fetchStaff]);
 
   const openCreate = () => { setEditingUser(null); setForm(emptyForm); setFormErrors({}); setModalOpen(true); };
   const openEdit = (u: User) => {
     setEditingUser(u);
-    setForm({ firstName: u.firstName, lastName: u.lastName, email: u.email, phone: u.phone || '', role: u.role, roleTitle: (u as any).roleTitle || (u as any).role_title || '', department: (u as any).department || '', password: '' });
+    setForm({ firstName: u.firstName, lastName: u.lastName, email: u.email, phone: u.phone || '', role: 'STAFF', roleTitle: (u as any).roleTitle || (u as any).role_title || '', department: (u as any).department || '', password: '' });
     setFormErrors({});
     setModalOpen(true);
   };
@@ -75,7 +73,7 @@ export default function StaffPage() {
     if (!validate()) return;
     setSaving(true);
     try {
-      const payload = { ...form, role_title: form.roleTitle, department: form.department };
+      const payload = { ...form, role: 'STAFF' as const, role_title: form.roleTitle, department: form.department };
       if (editingUser) {
         const { password: _, role: __, ...data } = payload;
         await userService.updateUser(editingUser.id, data as any);
@@ -85,7 +83,7 @@ export default function StaffPage() {
         toast.success('Personnel ajouté');
       }
       setModalOpen(false);
-      fetchStaff();
+      await fetchStaff();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Opération impossible');
     } finally { setSaving(false); }
@@ -94,14 +92,15 @@ export default function StaffPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
-    try { await userService.deleteUser(deleteTarget.id); toast.success('Personnel désactivé'); setDeleteTarget(null); fetchStaff(); }
+    try { await userService.deleteUser(deleteTarget.id); toast.success('Personnel désactivé'); setDeleteTarget(null); await fetchStaff(); }
     catch (error) { toast.error(error instanceof Error ? error.message : 'Suppression impossible'); }
     finally { setDeleting(false); }
   };
 
   const columns: Column<User>[] = [
     { key: 'name', header: 'Nom complet', render: (u) => <span className="font-medium text-gray-900">{u.firstName} {u.lastName}</span> },
-    { key: 'role', header: 'Rôle', render: (u) => { const b = getRoleBadge(u.role); return <span className={b.className}>{b.label}</span>; } },
+    { key: 'matricule', header: 'Matricule', render: (u) => <span className="text-sm text-gray-600">{u.matricule || '—'}</span> },
+    { key: 'role', header: 'Rôle', render: (u) => { const b = getRoleBadge('STAFF'); return <span className={b.className}>{b.label}</span>; } },
     { key: 'fonction', header: 'Fonction', render: (u) => <span className="text-sm text-gray-600">{(u as any).roleTitle || (u as any).role_title || '—'}</span> },
     { key: 'departement', header: 'Département', render: (u) => <span className="text-sm text-gray-600">{(u as any).department || '—'}</span> },
     { key: 'phone', header: 'Téléphone', render: (u) => formatPhone(u.phone) },
@@ -118,7 +117,7 @@ export default function StaffPage() {
           <Input label="Nom" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} error={formErrors.lastName} />
           <Input label="E-mail" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} error={formErrors.email} icon={<Mail className="h-4 w-4" />} />
           <Input label="Téléphone" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} icon={<Phone className="h-4 w-4" />} />
-          <Select label="Rôle" options={roleOptions} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })} />
+          <Select label="Rôle" options={roleOptions} value="STAFF" onChange={() => undefined} />
           <Input label="Fonction" value={form.roleTitle} onChange={(e) => setForm({ ...form, roleTitle: e.target.value })} placeholder="Ex: Professeur de maths" error={formErrors.roleTitle} />
           <Input label="Département" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="Ex: Sciences" />
           {!editingUser && <Input label="Mot de passe" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} error={formErrors.password} icon={<Lock className="h-4 w-4" />} />}

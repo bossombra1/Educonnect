@@ -1,163 +1,31 @@
 import { getPool } from '../config/database.js';
 import { RowDataPacket } from 'mysql2/promise';
 
-function scope(alias: string, establishmentId: number | null): { clause: string; params: number[] } {
-  return establishmentId === null
-    ? { clause: '', params: [] }
-    : { clause: ` AND ${alias}.establishment_id = ?`, params: [establishmentId] };
-}
+function scope(alias: string, establishmentId: number | null): { clause: string; params: number[] } { return establishmentId === null ? { clause: '', params: [] } : { clause: ` AND ${alias}.establishment_id = ?`, params: [establishmentId] }; }
 
 export async function getDashboardStats(establishmentId: number | null): Promise<any> {
-  const pool = getPool();
-  const userScope = scope('u', establishmentId);
-  const classScope = scope('c', establishmentId);
-  const messageScope = scope('m', establishmentId);
-  const scheduledScope = scope('sm', establishmentId);
-
-  const [userStats] = await pool.query<RowDataPacket[]>(
-    `SELECT r.name AS role_name, COUNT(u.id) AS count
-     FROM users u JOIN roles r ON r.id = u.role_id
-     WHERE u.is_active = 1${userScope.clause} GROUP BY r.name`, userScope.params);
-  const [classStats] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS total FROM classes c WHERE c.is_active = 1${classScope.clause}`, classScope.params);
-  const [messageStats] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS total,
-            SUM(CASE WHEN m.status = 'sent' THEN 1 ELSE 0 END) AS sent,
-            SUM(CASE WHEN m.status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled
-     FROM messages m WHERE 1=1${messageScope.clause}`, messageScope.params);
-  const [scheduledStats] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS pending_count FROM scheduled_messages sm
-     WHERE sm.status = 'pending'${scheduledScope.clause}`, scheduledScope.params);
-  const [readStats] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(mr.id) AS total_recipients,
-            COUNT(DISTINCT CASE WHEN mr.delivery_status = 'delivered' THEN mr.id END) AS total_delivered,
-            COUNT(DISTINCT mr2.id) AS total_read
-     FROM message_recipients mr
-     JOIN messages m ON m.id = mr.message_id
-     LEFT JOIN message_reads mr2 ON mr2.message_id = mr.message_id AND mr2.user_id = mr.user_id
-     WHERE 1=1${messageScope.clause}`, messageScope.params);
-  const [recentRows] = await pool.query<RowDataPacket[]>(
-    `SELECT m.id, m.title, m.content, m.message_type, m.priority, m.status,
-            m.sender_id, m.sent_at, m.created_at, m.updated_at,
-            COUNT(mr.id) AS total_recipients,
-            COUNT(DISTINCT mr2.user_id) AS read_count
-     FROM messages m
-     LEFT JOIN message_recipients mr ON mr.message_id = m.id
-     LEFT JOIN message_reads mr2 ON mr2.message_id = m.id AND mr2.user_id = mr.user_id
-     WHERE m.status = 'sent'${messageScope.clause}
-     GROUP BY m.id ORDER BY COALESCE(m.sent_at, m.created_at) DESC LIMIT 5`, messageScope.params);
-  const [dailyRows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE(m.sent_at) AS date, COUNT(*) AS count
-     FROM messages m WHERE m.status = 'sent' AND m.sent_at IS NOT NULL
-       AND m.sent_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)${messageScope.clause}
-     GROUP BY DATE(m.sent_at) ORDER BY date ASC`, messageScope.params);
-
-  const roles: Record<string, number> = {};
-  for (const row of userStats) roles[row.role_name] = Number(row.count);
-  const recipients = Number(readStats[0]?.total_recipients || 0);
-  const readCount = Number(readStats[0]?.total_read || 0);
-  return {
-    totalStudents: roles.STUDENT || 0,
-    totalParents: roles.PARENT || 0,
-    totalStaff: roles.STAFF || 0,
-    totalClasses: Number(classStats[0]?.total || 0),
-    totalMessagesSent: Number(messageStats[0]?.sent || 0),
-    readRate: recipients > 0 ? (readCount / recipients) * 100 : 0,
-    scheduledMessages: Number(scheduledStats[0]?.pending_count || 0),
-    recentMessages: recentRows.map((row) => ({
-      id: String(row.id), title: row.title ?? undefined, content: row.content,
-      type: row.message_type, priority: row.priority, senderId: String(row.sender_id),
-      recipients: [], attachments: [], status: row.status, sentAt: row.sent_at?.toISOString?.() ?? row.sent_at ?? undefined,
-      createdAt: row.created_at?.toISOString?.() ?? row.created_at, updatedAt: row.updated_at?.toISOString?.() ?? row.updated_at,
-      readCount: Number(row.read_count || 0), deliveryCount: 0, totalRecipients: Number(row.total_recipients || 0),
-    })),
-    messagesPerDay: dailyRows.map((row) => ({ date: row.date, count: Number(row.count) })),
-  };
+  const pool=getPool();const userScope=scope('u',establishmentId);const classScope=scope('c',establishmentId);const messageScope=scope('m',establishmentId);const scheduledScope=scope('sm',establishmentId);
+  const [userStats]=await pool.query<RowDataPacket[]>(`SELECT r.name AS role_name,COUNT(u.id) AS count FROM users u JOIN roles r ON r.id=u.role_id WHERE u.is_active=1${userScope.clause} GROUP BY r.name`,userScope.params);
+  const [classStats]=await pool.query<RowDataPacket[]>(`SELECT COUNT(*) AS total FROM classes c WHERE c.is_active=1${classScope.clause}`,classScope.params);
+  const [messageStats]=await pool.query<RowDataPacket[]>(`SELECT COUNT(*) AS total,SUM(CASE WHEN m.status='sent' THEN 1 ELSE 0 END) AS sent,SUM(CASE WHEN m.status='scheduled' THEN 1 ELSE 0 END) AS scheduled FROM messages m WHERE 1=1${messageScope.clause}`,messageScope.params);
+  const [scheduledStats]=await pool.query<RowDataPacket[]>(`SELECT COUNT(*) AS pending_count FROM scheduled_messages sm WHERE sm.status='pending'${scheduledScope.clause}`,scheduledScope.params);
+  const [readStats]=await pool.query<RowDataPacket[]>(`SELECT COUNT(DISTINCT mr.id) AS total_recipients,COUNT(DISTINCT CASE WHEN mr.delivery_status='delivered' THEN mr.id END) AS total_delivered,COUNT(DISTINCT mr2.id) AS total_read FROM message_recipients mr JOIN messages m ON m.id=mr.message_id LEFT JOIN message_reads mr2 ON mr2.message_id=mr.message_id AND mr2.user_id=mr.user_id WHERE 1=1${messageScope.clause}`,messageScope.params);
+  const [recentRows]=await pool.query<RowDataPacket[]>(`SELECT m.id,m.title,m.content,m.message_type,m.priority,m.status,m.sender_id,m.sent_at,m.created_at,m.updated_at,COUNT(mr.id) AS total_recipients,COUNT(DISTINCT mr2.user_id) AS read_count FROM messages m LEFT JOIN message_recipients mr ON mr.message_id=m.id LEFT JOIN message_reads mr2 ON mr2.message_id=m.id AND mr2.user_id=mr.user_id WHERE m.status='sent'${messageScope.clause} GROUP BY m.id ORDER BY COALESCE(m.sent_at,m.created_at) DESC LIMIT 5`,messageScope.params);
+  const [dailyRows]=await pool.query<RowDataPacket[]>(`SELECT DATE(m.sent_at) AS date,COUNT(*) AS count FROM messages m WHERE m.status='sent' AND m.sent_at IS NOT NULL AND m.sent_at>=DATE_SUB(CURDATE(),INTERVAL 7 DAY)${messageScope.clause} GROUP BY DATE(m.sent_at) ORDER BY date ASC`,messageScope.params);
+  const roles:Record<string,number>={};for(const row of userStats)roles[row.role_name]=Number(row.count);const recipients=Number(readStats[0]?.total_recipients||0);const readCount=Number(readStats[0]?.total_read||0);
+  return {totalStudents:roles.STUDENT||0,totalParents:roles.PARENT||0,totalStaff:roles.STAFF||0,totalClasses:Number(classStats[0]?.total||0),totalMessagesSent:Number(messageStats[0]?.sent||0),readRate:recipients>0?(readCount/recipients)*100:0,scheduledMessages:Number(scheduledStats[0]?.pending_count||0),recentMessages:recentRows.map(row=>({id:String(row.id),title:row.title??undefined,content:row.content,type:row.message_type,priority:row.priority,senderId:String(row.sender_id),recipients:[],attachments:[],status:row.status,sentAt:row.sent_at?.toISOString?.()??row.sent_at??undefined,createdAt:row.created_at?.toISOString?.()??row.created_at,updatedAt:row.updated_at?.toISOString?.()??row.updated_at,readCount:Number(row.read_count||0),deliveryCount:0,totalRecipients:Number(row.total_recipients||0)})),messagesPerDay:dailyRows.map(row=>({date:row.date,count:Number(row.count)}))};
 }
 
-export async function getMessageStats(messageId: number, establishmentId: number): Promise<any> {
-  const pool = getPool();
-  const [stats] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS total,
-            SUM(CASE WHEN mr.delivery_status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
-            SUM(CASE WHEN mr.delivery_status = 'failed' THEN 1 ELSE 0 END) AS failed,
-            (SELECT COUNT(DISTINCT rd.user_id)
-             FROM message_reads rd JOIN messages rm ON rm.id = rd.message_id
-             WHERE rd.message_id = ? AND rm.establishment_id = ?) AS read_count,
-            (SELECT COUNT(DISTINCT ma.user_id)
-             FROM message_acknowledgements ma JOIN messages am ON am.id = ma.message_id
-             WHERE ma.message_id = ? AND am.establishment_id = ?) AS acknowledged_count
-     FROM message_recipients mr
-     JOIN messages m ON m.id = mr.message_id
-     WHERE mr.message_id = ? AND m.establishment_id = ?`,
-    [messageId, establishmentId, messageId, establishmentId, messageId, establishmentId]);
-  const row = stats[0];
-  const total = Number(row?.total || 0);
-  const readCount = Number(row?.read_count || 0);
-  return {
-    total,
-    delivered: Number(row?.delivered || 0),
-    failed: Number(row?.failed || 0),
-    read_count: readCount,
-    acknowledged_count: Number(row?.acknowledged_count || 0),
-    read_rate: total > 0 ? Math.round((readCount / total) * 100) : 0,
-  };
+export async function getMessageStats(messageId:number,establishmentId:number):Promise<any>{const pool=getPool();const [stats]=await pool.query<RowDataPacket[]>(`SELECT COUNT(*) AS total,SUM(CASE WHEN mr.delivery_status='delivered' THEN 1 ELSE 0 END) AS delivered,SUM(CASE WHEN mr.delivery_status='failed' THEN 1 ELSE 0 END) AS failed,(SELECT COUNT(DISTINCT rd.user_id) FROM message_reads rd JOIN messages rm ON rm.id=rd.message_id WHERE rd.message_id=? AND rm.establishment_id=?) AS read_count,(SELECT COUNT(DISTINCT ma.user_id) FROM message_acknowledgements ma JOIN messages am ON am.id=ma.message_id WHERE ma.message_id=? AND am.establishment_id=?) AS acknowledged_count FROM message_recipients mr JOIN messages m ON m.id=mr.message_id WHERE mr.message_id=? AND m.establishment_id=?`,[messageId,establishmentId,messageId,establishmentId,messageId,establishmentId]);const row=stats[0];const total=Number(row?.total||0);const readCount=Number(row?.read_count||0);return {total,delivered:Number(row?.delivered||0),failed:Number(row?.failed||0),read_count:readCount,acknowledged_count:Number(row?.acknowledged_count||0),read_rate:total>0?Math.round((readCount/total)*100):0};}
+
+export async function getMessageStatsForEstablishment(establishmentId:number|null):Promise<any>{
+  const pool=getPool();const messageScope=scope('m',establishmentId);
+  const [summary]=await pool.query<RowDataPacket[]>(`SELECT COUNT(DISTINCT m.id) AS total_sent,COUNT(DISTINCT mr.user_id) AS total_recipients,COUNT(DISTINCT mr2.user_id) AS total_read FROM messages m LEFT JOIN message_recipients mr ON mr.message_id=m.id LEFT JOIN message_reads mr2 ON mr2.message_id=m.id AND mr2.user_id=mr.user_id WHERE m.status='sent'${messageScope.clause}`,messageScope.params);
+  const [byDay]=await pool.query<RowDataPacket[]>(`SELECT DATE(m.sent_at) AS date,COUNT(DISTINCT m.id) AS sent,COUNT(DISTINCT mr2.user_id) AS read FROM messages m LEFT JOIN message_recipients mr ON mr.message_id=m.id LEFT JOIN message_reads mr2 ON mr2.message_id=m.id AND mr2.user_id=mr.user_id WHERE m.status='sent' AND m.sent_at IS NOT NULL AND m.sent_at>=DATE_SUB(CURDATE(),INTERVAL 30 DAY)${messageScope.clause} GROUP BY DATE(m.sent_at) ORDER BY date ASC`,messageScope.params);
+  const [byType]=await pool.query<RowDataPacket[]>(`SELECT m.message_type AS type,COUNT(*) AS count FROM messages m WHERE m.status='sent'${messageScope.clause} GROUP BY m.message_type ORDER BY count DESC`,messageScope.params);
+  const [unread]=await pool.query<RowDataPacket[]>(`SELECT m.id,m.title,m.content,m.message_type,m.priority,m.sender_id,m.sent_at,m.created_at,COUNT(DISTINCT mr.user_id) AS total_recipients,COUNT(DISTINCT mr2.user_id) AS read_count FROM messages m JOIN message_recipients mr ON mr.message_id=m.id LEFT JOIN message_reads mr2 ON mr2.message_id=m.id AND mr2.user_id=mr.user_id WHERE m.status='sent'${messageScope.clause} GROUP BY m.id HAVING read_count<total_recipients ORDER BY read_count/NULLIF(total_recipients,0) ASC LIMIT 10`,messageScope.params);
+  const totalSent=Number(summary[0]?.total_sent||0);const totalRecipients=Number(summary[0]?.total_recipients||0);const totalRead=Number(summary[0]?.total_read||0);
+  return {totalSent,totalRecipients,totalRead,readRate:totalRecipients>0?(totalRead/totalRecipients)*100:0,byDay:byDay.map(r=>({date:r.date,sent:Number(r.sent),read:Number(r.read)})),byType:byType.map(r=>({type:r.type,count:Number(r.count)})),unreadMessages:unread.map(r=>({id:String(r.id),title:r.title??undefined,content:r.content,type:r.message_type,priority:r.priority,senderId:String(r.sender_id),recipients:[],attachments:[],status:'sent',createdAt:r.created_at?.toISOString?.()??r.created_at,updatedAt:r.created_at?.toISOString?.()??r.created_at,sentAt:r.sent_at?.toISOString?.()??r.sent_at??undefined,readCount:Number(r.read_count||0),deliveryCount:0,totalRecipients:Number(r.total_recipients||0)}))};
 }
 
-export async function getMessageStatsForEstablishment(establishmentId: number | null): Promise<any> {
-  const pool = getPool();
-  const messageScope = scope('m', establishmentId);
-  const [summary] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(DISTINCT m.id) AS total_sent, COUNT(DISTINCT mr2.id) AS total_read
-     FROM messages m
-     LEFT JOIN message_recipients mr ON mr.message_id = m.id
-     LEFT JOIN message_reads mr2 ON mr2.message_id = m.id AND mr2.user_id = mr.user_id
-     WHERE m.status = 'sent'${messageScope.clause}`, messageScope.params);
-  const [byDay] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE(m.sent_at) AS date, COUNT(DISTINCT m.id) AS sent, COUNT(DISTINCT mr2.id) AS read
-     FROM messages m
-     LEFT JOIN message_recipients mr ON mr.message_id = m.id
-     LEFT JOIN message_reads mr2 ON mr2.message_id = m.id AND mr2.user_id = mr.user_id
-     WHERE m.status = 'sent' AND m.sent_at IS NOT NULL
-       AND m.sent_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)${messageScope.clause}
-     GROUP BY DATE(m.sent_at) ORDER BY date ASC`, messageScope.params);
-  const [byType] = await pool.query<RowDataPacket[]>(
-    `SELECT m.message_type AS type, COUNT(*) AS count FROM messages m
-     WHERE m.status = 'sent'${messageScope.clause} GROUP BY m.message_type ORDER BY count DESC`, messageScope.params);
-  const [unread] = await pool.query<RowDataPacket[]>(
-    `SELECT m.id, m.title, m.content, m.message_type, m.priority, m.sender_id, m.sent_at, m.created_at,
-            COUNT(DISTINCT mr.user_id) AS total_recipients, COUNT(DISTINCT mr2.user_id) AS read_count
-     FROM messages m JOIN message_recipients mr ON mr.message_id = m.id
-     LEFT JOIN message_reads mr2 ON mr2.message_id = m.id AND mr2.user_id = mr.user_id
-     WHERE m.status = 'sent'${messageScope.clause}
-     GROUP BY m.id HAVING read_count < total_recipients ORDER BY read_count / NULLIF(total_recipients, 0) ASC LIMIT 10`, messageScope.params);
-  const totalSent = Number(summary[0]?.total_sent || 0);
-  const totalRead = Number(summary[0]?.total_read || 0);
-  return {
-    totalSent, totalRead, readRate: totalSent > 0 ? (totalRead / totalSent) * 100 : 0,
-    byDay: byDay.map((r) => ({ date: r.date, sent: Number(r.sent), read: Number(r.read) })),
-    byType: byType.map((r) => ({ type: r.type, count: Number(r.count) })),
-    unreadMessages: unread.map((r) => ({
-      id: String(r.id), title: r.title ?? undefined, content: r.content, type: r.message_type,
-      priority: r.priority, senderId: String(r.sender_id), recipients: [], attachments: [], status: r.status ?? 'sent',
-      createdAt: r.created_at?.toISOString?.() ?? r.created_at, updatedAt: r.created_at?.toISOString?.() ?? r.created_at,
-      sentAt: r.sent_at?.toISOString?.() ?? r.sent_at ?? undefined, readCount: Number(r.read_count || 0),
-      deliveryCount: 0, totalRecipients: Number(r.total_recipients || 0),
-    })),
-  };
-}
-
-export async function getDailyMessageStats(establishmentId: number | null, days: number = 30): Promise<any[]> {
-  const pool = getPool();
-  const messageScope = scope('m', establishmentId);
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE(m.sent_at) AS date, COUNT(*) AS message_count,
-       (SELECT COUNT(*) FROM message_recipients mr2 JOIN messages m2 ON m2.id = mr2.message_id
-        WHERE DATE(m2.sent_at) = DATE(m.sent_at)${establishmentId === null ? '' : ' AND m2.establishment_id = ?'}) AS recipient_count
-     FROM messages m WHERE m.status = 'sent' AND m.sent_at IS NOT NULL
-       AND m.sent_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)${messageScope.clause}
-     GROUP BY DATE(m.sent_at) ORDER BY date ASC`,
-    establishmentId === null ? [days] : [establishmentId, days, establishmentId]
-  );
-  return rows;
-}
+export async function getDailyMessageStats(establishmentId:number|null,days:number=30):Promise<any[]>{const pool=getPool();const messageScope=scope('m',establishmentId);const [rows]=await pool.query<RowDataPacket[]>(`SELECT DATE(m.sent_at) AS date,COUNT(*) AS message_count,(SELECT COUNT(*) FROM message_recipients mr2 JOIN messages m2 ON m2.id=mr2.message_id WHERE DATE(m2.sent_at)=DATE(m.sent_at)${establishmentId===null?'':' AND m2.establishment_id = ?'}) AS recipient_count FROM messages m WHERE m.status='sent' AND m.sent_at IS NOT NULL AND m.sent_at>=DATE_SUB(CURDATE(),INTERVAL ? DAY)${messageScope.clause} GROUP BY DATE(m.sent_at) ORDER BY date ASC`,establishmentId===null?[days]:[establishmentId,days,establishmentId]);return rows;}
