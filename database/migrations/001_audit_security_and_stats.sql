@@ -7,6 +7,11 @@ USE educonnect;
 ALTER TABLE users
   MODIFY COLUMN otp_code VARCHAR(255) DEFAULT NULL;
 
+-- OTP throttling state. Defaults preserve existing accounts.
+ALTER TABLE users
+  ADD COLUMN otp_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  ADD COLUMN otp_requested_at DATETIME DEFAULT NULL;
+
 -- Rebuild the message statistics view using independent aggregations.
 -- This avoids row multiplication when a message has multiple recipients,
 -- reads and acknowledgements.

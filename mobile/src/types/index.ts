@@ -79,14 +79,17 @@ export interface PaginatedResponse<T> {
   total: number;
 }
 
-export interface LoginRequest {
-  matricule: string;
+export interface OtpRequest {
   phone: string;
+  matricule?: string;
+  childMatricule?: string;
 }
 
-export interface OtpRequest {
-  matricule: string;
+export interface OtpVerifyRequest {
+  phone: string;
   code: string;
+  matricule?: string;
+  childMatricule?: string;
 }
 
 export interface OtpResponse {

@@ -5,12 +5,6 @@ import * as otpService from '../services/otp.service.js';
 export async function login(req: Request, res: Response): Promise<void> {
   try {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      res.status(400).json({ success: false, error: 'Email et mot de passe sont requis.' });
-      return;
-    }
-
     const result = await authService.login(email, password);
     res.status(200).json({ success: true, data: result });
   } catch (err) {
@@ -22,14 +16,8 @@ export async function login(req: Request, res: Response): Promise<void> {
 
 export async function requestOtp(req: Request, res: Response): Promise<void> {
   try {
-    const { matricule, phone } = req.body;
-
-    if (!matricule || !phone) {
-      res.status(400).json({ success: false, error: 'Le matricule et le téléphone sont requis.' });
-      return;
-    }
-
-    const result = await otpService.requestOtp(matricule, phone);
+    const { phone, matricule, childMatricule } = req.body;
+    const result = await otpService.requestOtp({ phone, matricule, childMatricule });
     res.status(200).json({ success: true, data: result });
   } catch (err) {
     res.status(400).json({ success: false, error: (err as Error).message });
@@ -38,14 +26,8 @@ export async function requestOtp(req: Request, res: Response): Promise<void> {
 
 export async function verifyOtp(req: Request, res: Response): Promise<void> {
   try {
-    const { matricule, code } = req.body;
-
-    if (!matricule || !code) {
-      res.status(400).json({ success: false, error: 'Matricule et code OTP sont requis.' });
-      return;
-    }
-
-    const result = await otpService.verifyOtp(matricule, code);
+    const { phone, matricule, childMatricule, code } = req.body;
+    const result = await otpService.verifyOtp({ phone, matricule, childMatricule }, code);
     res.status(200).json({ success: true, data: result });
   } catch (err) {
     res.status(400).json({ success: false, error: (err as Error).message });
@@ -57,7 +39,7 @@ export async function logout(req: Request, res: Response): Promise<void> {
     const user = req.user as any;
     await authService.logout(user.userId);
     res.status(200).json({ success: true, message: 'Déconnexion réussie.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ success: false, error: 'Erreur lors de la déconnexion.' });
   }
 }

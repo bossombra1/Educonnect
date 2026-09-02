@@ -26,8 +26,8 @@ export default {
       bundleIdentifier: "com.educonnect.mobile"
     },
     extra: {
-      apiUrl: "http://10.0.2.2:3000/api",
-      establishmentSlug: "Mon Établissement"
+      apiUrl: process.env.EXPO_PUBLIC_API_URL || "http://10.0.2.2:3000/api",
+      establishmentSlug: process.env.EXPO_PUBLIC_ESTABLISHMENT_SLUG || "Mon Établissement"
     },
     plugins: [
       "expo-router",
