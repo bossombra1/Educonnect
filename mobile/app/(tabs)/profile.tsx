@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -14,7 +13,6 @@ import {
   GraduationCap,
   ShieldCheck,
 } from 'lucide-react-native';
-import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import {
   Colors,
@@ -27,6 +25,23 @@ import { useAuth } from '@/hooks/useAuth';
 import type { Child } from '@/types';
 import apiClient from '@/services/api';
 
+type BackendChild = {
+  student_id: number | string;
+  first_name?: string | null;
+  last_name?: string | null;
+  matricule_scolaire?: string | null;
+  class_name?: string | null;
+  avatar_url?: string | null;
+};
+
+type ProfileResponse = {
+  success: boolean;
+  data: {
+    establishment_name?: string | null;
+    children?: BackendChild[];
+  };
+};
+
 const roleLabels: Record<string, string> = {
   parent: 'Parent',
   student: 'Élève',
@@ -34,10 +49,25 @@ const roleLabels: Record<string, string> = {
   admin: 'Administrateur',
 };
 
+function normalizeChild(child: BackendChild): Child {
+  const fullName = [child.first_name?.trim(), child.last_name?.trim()]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  return {
+    id: String(child.student_id),
+    matricule: child.matricule_scolaire ?? '',
+    full_name: fullName || child.matricule_scolaire || 'Élève',
+    class_name: child.class_name ?? 'Classe non renseignée',
+    ...(child.avatar_url ? { avatar_url: child.avatar_url } : {}),
+  };
+}
+
 export default function ProfileScreen() {
   const { user } = useAuth();
   const [children, setChildren] = useState<Child[]>([]);
-  const establishmentName = Constants.expoConfig?.extra?.establishmentSlug ?? 'Établissement';
+  const [profileEstablishmentName, setProfileEstablishmentName] = useState('');
 
   const displayName = user?.full_name ?? 'Utilisateur';
   const initials = displayName
@@ -48,24 +78,32 @@ export default function ProfileScreen() {
     .toUpperCase();
 
   useEffect(() => {
-    if (user?.role === 'parent') {
-      loadChildren();
-    }
+    let mounted = true;
+
+    const loadProfile = async () => {
+      try {
+        const { data } = await apiClient.get<ProfileResponse>('/auth/profile');
+        if (!mounted) return;
+        setProfileEstablishmentName(data.data.establishment_name?.trim() ?? '');
+        if (user?.role === 'parent') {
+          setChildren((data.data.children ?? []).map(normalizeChild));
+        }
+      } catch {
+        // Le profil local reste affiché si le réseau est indisponible.
+      }
+    };
+
+    if (user) void loadProfile();
+    return () => {
+      mounted = false;
+    };
   }, [user?.role]);
 
-  const loadChildren = async () => {
-    try {
-      const { data } = await apiClient.get('/api/children');
-      setChildren(data.data ?? []);
-    } catch {
-      // silencieux
-    }
-  };
+  const establishmentName = profileEstablishmentName || user?.establishment_name || 'Établissement';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        {/* Avatar et info */}
         <View style={styles.profileHeader}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
@@ -82,7 +120,6 @@ export default function ProfileScreen() {
           ) : null}
         </View>
 
-        {/* Établissement */}
         <View style={[styles.infoCard, Shadows.sm]}>
           <GraduationCap size={20} color={Colors.primary} />
           <View style={styles.infoContent}>
@@ -91,7 +128,6 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Enfants (parents) */}
         {user?.role === 'parent' && children.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Mes enfants</Text>
@@ -118,12 +154,10 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* V2 Note */}
         <View style={styles.v2Note}>
           <Text style={styles.v2NoteText}>V2 : moyennes et emploi du temps bientôt disponibles.</Text>
         </View>
 
-        {/* Paramètres */}
         <TouchableOpacity
           style={[styles.settingsRow, Shadows.sm]}
           onPress={() => router.push('/settings')}
