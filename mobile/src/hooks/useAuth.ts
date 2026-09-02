@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { router } from 'expo-router';
 import authService from '@/services/auth.service';
-import type { User } from '@/types';
+import type { OtpRequest, OtpVerifyRequest, User } from '@/types';
 
 interface UseAuthReturn {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (matricule: string, phone: string) => Promise<void>;
-  verifyOtp: (matricule: string, code: string) => Promise<void>;
+  login: (request: OtpRequest) => Promise<void>;
+  verifyOtp: (request: OtpVerifyRequest) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -17,33 +17,34 @@ export function useAuth(): UseAuthReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
   const checkAuth = useCallback(async () => {
     try {
       const token = await authService.getStoredToken();
-      if (token) {
-        const storedUser = await authService.getStoredUser();
-        if (storedUser) {
-          setUser(storedUser);
-          setIsAuthenticated(true);
-        }
+      if (!token) return;
+
+      const storedUser = await authService.getStoredUser();
+      if (storedUser) {
+        setUser(storedUser);
+        setIsAuthenticated(true);
       }
     } catch {
+      setUser(null);
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const login = useCallback(async (matricule: string, phone: string) => {
-    await authService.requestOtp(matricule, phone);
+  useEffect(() => {
+    void checkAuth();
+  }, [checkAuth]);
+
+  const login = useCallback(async (request: OtpRequest) => {
+    await authService.requestOtp(request);
   }, []);
 
-  const verifyOtp = useCallback(async (matricule: string, code: string) => {
-    const response = await authService.verifyOtp(matricule, code);
+  const verifyOtp = useCallback(async (request: OtpVerifyRequest) => {
+    const response = await authService.verifyOtp(request);
     setUser(response.user);
     setIsAuthenticated(true);
   }, []);
