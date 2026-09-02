@@ -1,0 +1,26 @@
+import { Router } from 'express';
+import authRoutes from './auth.routes.js';
+import messageRoutes from './message.routes.js';
+import userRoutes from './user.routes.js';
+import groupRoutes from './group.routes.js';
+import classRoutes from './class.routes.js';
+import importRoutes from './import.routes.js';
+import notificationRoutes from './notification.routes.js';
+import statisticsRoutes from './statistics.routes.js';
+import uploadRoutes from './upload.routes.js';
+import scheduledMessageRoutes from './scheduled-message.routes.js';
+
+const router = Router();
+
+router.use('/auth', authRoutes);
+router.use('/messages', messageRoutes);
+router.use('/users', userRoutes);
+router.use('/groups', groupRoutes);
+router.use('/classes', classRoutes);
+router.use('/imports', importRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/statistics', statisticsRoutes);
+router.use('/uploads', uploadRoutes);
+router.use('/scheduled-messages', scheduledMessageRoutes);
+
+export default router;

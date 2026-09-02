@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "EduConnect",
+    "slug": "educonnect",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1E40AF"
+    },
+    "ios": {
+      "bundleIdentifier": "ci.educonnect.app",
+      "supportsTablet": true,
+      "buildNumber": "1"
+    },
+    "android": {
+      "package": "ci.educonnect.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1E40AF"
+      },
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "INTERNET",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#1E40AF"
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "scheme": "educonnect",
+    "extra": {
+      "apiUrl": "http://192.168.1.67:3000/api",
+      "establishmentSlug": "ets-demo"
+    },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
