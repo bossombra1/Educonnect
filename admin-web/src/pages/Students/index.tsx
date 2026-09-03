@@ -11,7 +11,7 @@ import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import SearchBar from '@/components/ui/SearchBar';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import { formatPhone, getRoleBadge } from '@/utils/formatters';
+import { formatPhone } from '@/utils/formatters';
 import type { User, Class, ImportResult } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -22,6 +22,8 @@ export default function StudentsPage() {
   const [students, setStudents] = useState<User[]>([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [classesError, setClassesError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [classes, setClasses] = useState<Class[]>([]);
@@ -39,6 +41,7 @@ export default function StudentsPage() {
 
   const fetchStudents = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const params: Record<string, string | number> = { page: pagination.page, limit: 20, role: 'STUDENT' };
       if (classFilter) params.classId = classFilter;
@@ -47,15 +50,26 @@ export default function StudentsPage() {
       setStudents(res.data);
       setPagination({ page: res.pagination.page, totalPages: res.pagination.totalPages, total: res.pagination.total });
     } catch (error) {
-      setStudents([]);
-      toast.error(error instanceof Error ? error.message : 'Impossible de charger les élèves');
+      const message = error instanceof Error ? error.message : 'Impossible de charger les élèves';
+      setLoadError(message);
+      toast.error(message);
     } finally { setLoading(false); }
   }, [pagination.page, classFilter, search]);
 
-  useEffect(() => { fetchStudents(); }, [fetchStudents]);
-  useEffect(() => {
-    classService.getClasses().then(setClasses).catch((error) => toast.error(error instanceof Error ? error.message : 'Impossible de charger les classes'));
+  const fetchClasses = useCallback(async () => {
+    setClassesError(null);
+    try {
+      const res = await classService.getClasses();
+      setClasses(res.data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Impossible de charger les classes';
+      setClassesError(message);
+      toast.error(message);
+    }
   }, []);
+
+  useEffect(() => { fetchStudents(); }, [fetchStudents]);
+  useEffect(() => { fetchClasses(); }, [fetchClasses]);
 
   const openCreate = () => { setEditingUser(null); setForm({ ...emptyForm }); setFormErrors({}); setModalOpen(true); };
   const openEdit = (u: User) => {
@@ -118,11 +132,13 @@ export default function StudentsPage() {
     { key: 'class', header: 'Classe', render: (u) => <span className="text-sm text-gray-600">{u.className || '—'}</span> },
     { key: 'phone', header: 'Téléphone', render: (u) => formatPhone(u.phone) },
     { key: 'isActive', header: 'Statut', render: (u) => u.isActive ? <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Actif</span> : <span className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Inactif</span> },
-    { key: 'actions', header: 'Actions', className: 'text-right', render: (u) => <div className="flex items-center justify-end gap-1"><button onClick={() => openEdit(u)} className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-primary"><Pencil className="h-4 w-4" /></button><button onClick={() => setDeleteTarget(u)} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div> },
+    { key: 'actions', header: 'Actions', className: 'text-right', render: (u) => <div className="flex items-center justify-end gap-1"><button aria-label={`Modifier ${u.firstName} ${u.lastName}`} onClick={() => openEdit(u)} className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-primary"><Pencil className="h-4 w-4" /></button><button aria-label={`Désactiver ${u.firstName} ${u.lastName}`} onClick={() => setDeleteTarget(u)} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div> },
   ];
 
   return (
     <div className="space-y-4">
+      {loadError && <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><span>{loadError}</span><Button variant="secondary" onClick={fetchStudents}>Réessayer</Button></div>}
+      {classesError && <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><span>{classesError}</span><Button variant="secondary" onClick={fetchClasses}>Réessayer les classes</Button></div>}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center"><div className="w-full sm:max-w-xs"><SearchBar onSearch={(value) => { setSearch(value); setPagination((p) => ({ ...p, page: 1 })); }} placeholder="Rechercher un élève..." /></div><div className="w-full sm:w-48"><select value={classFilter} onChange={(e) => { setClassFilter(e.target.value); setPagination((p) => ({ ...p, page: 1 })); }} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-blue-500"><option value="">Toutes les classes</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div></div><div className="flex gap-2"><Button variant="secondary" onClick={() => { setImportFile(null); setImportResult(null); setImportModalOpen(true); }}><Upload className="h-4 w-4" /> Importer Excel</Button><Button onClick={openCreate}><Plus className="h-4 w-4" /> Ajouter un élève</Button></div></div>
       <Card className="!p-0 overflow-hidden"><Table columns={columns} data={students as any} loading={loading} keyExtractor={(u) => u.id} emptyMessage="Aucun élève trouvé" /></Card>
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingUser ? 'Modifier l\'élève' : 'Ajouter un élève'} size="lg">
