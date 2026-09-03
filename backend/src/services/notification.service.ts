@@ -1,6 +1,6 @@
 import { getPool } from '../config/database.js';
 import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
-import { sendPushNotification } from '../config/firebase.js';
+import { sendPushNotification, sendBulkPushNotificationsDetailed } from '../config/firebase.js';
 import { PaginationOptions, PaginationResult } from '../types/index.js';
 
 const VALID_DEVICE_TYPES = new Set(['android', 'ios', 'web']);
@@ -12,7 +12,7 @@ export async function getUserNotifications(userId: number, options: PaginationOp
   const offset = (page - 1) * limit;
   const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) as total FROM notifications WHERE user_id = ?', [userId]);
   const total = Number(countRows[0]?.total || 0);
-  const [notifications] = await pool.query<RowDataPacket[]>(`SELECT n.* FROM notifications n WHERE n.user_id = ? ORDER BY n.created_at DESC LIMIT ? OFFSET ?`, [userId, limit, offset]);
+  const [notifications] = await pool.query<RowDataPacket[]>('SELECT n.* FROM notifications n WHERE n.user_id = ? ORDER BY n.created_at DESC LIMIT ? OFFSET ?', [userId, limit, offset]);
   return { data: notifications, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
@@ -30,8 +30,8 @@ export async function sendNotificationToUsers(userIds: number[], title: string, 
   const params: any[] = [];
   for (const userId of uniqueUserIds) params.push(userId, messageId || null, title, body, data ? JSON.stringify(data) : null, 'pending');
   await pool.query(`INSERT INTO notifications (user_id, message_id, title, body, data, fcm_status, sent_at) VALUES ${placeholders}`, params);
-  const { sendBulkPushNotifications } = await import('../config/firebase.js');
-  return sendBulkPushNotifications(uniqueUserIds, title, body, data);
+  const result = await sendBulkPushNotificationsDetailed(uniqueUserIds, title, body, data);
+  return result.successCount;
 }
 
 export async function sendSingleNotification(userId: number, title: string, body: string, messageId?: number, data?: Record<string, string>): Promise<boolean> {
@@ -42,7 +42,7 @@ export async function sendSingleNotification(userId: number, title: string, body
 
 export async function getUnreadMessageCount(userId: number): Promise<number> {
   const pool = getPool();
-  const [rows] = await pool.query<RowDataPacket[]>(`SELECT COUNT(*) as count FROM message_recipients mr JOIN messages m ON m.id = mr.message_id WHERE mr.user_id = ? AND m.status = 'sent' AND NOT EXISTS (SELECT 1 FROM message_reads rd WHERE rd.message_id = mr.message_id AND rd.user_id = ?)`, [userId, userId]);
+  const [rows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) as count FROM message_recipients mr JOIN messages m ON m.id = mr.message_id WHERE mr.user_id = ? AND m.status = \'sent\' AND NOT EXISTS (SELECT 1 FROM message_reads rd WHERE rd.message_id = mr.message_id AND rd.user_id = ?)', [userId, userId]);
   return Number(rows[0]?.count || 0);
 }
 
@@ -60,8 +60,8 @@ export async function getAdminNotifications(establishmentId: number, options: Pa
   const limit = Math.min(100, Math.max(1, options.limit || 20));
   const offset = (page - 1) * limit;
   const search = options.search?.trim() || '';
-  const searchClause = search ? ' AND (n.title LIKE ? OR CONCAT(u.first_name, \' \', u.last_name) LIKE ?)' : '';
-  const searchParams = search ? [`%${search}%`, `%${search}%`] : [];
+  const searchClause = search ? ' AND (n.title LIKE ? OR n.body LIKE ? OR CONCAT(u.first_name, \' \', u.last_name) LIKE ?)' : '';
+  const searchParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [];
   const baseParams = [establishmentId, ...searchParams];
   const [countRows] = await pool.query<RowDataPacket[]>(`SELECT COUNT(*) AS total FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.establishment_id = ?${searchClause}`, baseParams);
   const total = Number(countRows[0]?.total || 0);

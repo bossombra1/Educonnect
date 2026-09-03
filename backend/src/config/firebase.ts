@@ -57,15 +57,85 @@ export async function sendPushNotification(
       token: fcmToken,
     };
 
-    if (data) {
-      message.data = data;
-    }
+    if (data) message.data = data;
 
-    await admin.messaging().send(message);
+    const messageId = await admin.messaging().send(message);
+    await pool.query(
+      `UPDATE notifications
+       SET fcm_message_id = ?, fcm_status = 'sent', sent_at = COALESCE(sent_at, NOW())
+       WHERE user_id = ? AND title = ? AND body = ? AND fcm_status = 'pending'
+       ORDER BY id DESC LIMIT 1`,
+      [messageId, userId, title, body]
+    );
     return true;
   } catch (err) {
     console.error(`[Firebase] Failed to send push to user ${userId}:`, (err as Error).message);
     return false;
+  }
+}
+
+export interface BulkPushResult {
+  successCount: number;
+  results: Array<{ userId: number; success: boolean; messageId?: string; error?: string }>;
+}
+
+export async function sendBulkPushNotificationsDetailed(
+  userIds: number[],
+  title: string,
+  body: string,
+  data?: Record<string, string>
+): Promise<BulkPushResult> {
+  if (!isFirebaseInitialized || userIds.length === 0) return { successCount: 0, results: [] };
+
+  try {
+    const { getPool } = await import('../config/database.js');
+    const pool = getPool();
+    const placeholders = userIds.map(() => '?').join(',');
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, fcm_token FROM users WHERE id IN (${placeholders}) AND fcm_token IS NOT NULL AND fcm_token != ''`,
+      userIds
+    );
+
+    if (rows.length === 0) return { successCount: 0, results: [] };
+
+    const multicastMessage: admin.messaging.MulticastMessage = {
+      notification: { title, body },
+      tokens: rows.map((r) => r.fcm_token as string),
+    };
+    if (data) multicastMessage.data = data;
+
+    const response = await admin.messaging().sendEachForMulticast(multicastMessage);
+    const results = response.responses.map((item, index) => ({
+      userId: Number(rows[index].id),
+      success: item.success,
+      ...(item.success && item.messageId ? { messageId: item.messageId } : {}),
+      ...(!item.success && item.error ? { error: item.error.message } : {}),
+    }));
+
+    for (const result of results) {
+      if (result.success && result.messageId) {
+        await pool.query(
+          `UPDATE notifications
+           SET fcm_message_id = ?, fcm_status = 'sent', sent_at = COALESCE(sent_at, NOW())
+           WHERE user_id = ? AND title = ? AND body = ? AND fcm_status = 'pending'
+           ORDER BY id DESC LIMIT 1`,
+          [result.messageId, result.userId, title, body]
+        );
+      } else if (!result.success) {
+        await pool.query(
+          `UPDATE notifications
+           SET fcm_status = 'failed'
+           WHERE user_id = ? AND title = ? AND body = ? AND fcm_status = 'pending'
+           ORDER BY id DESC LIMIT 1`,
+          [result.userId, title, body]
+        );
+      }
+    }
+
+    return { successCount: response.successCount, results };
+  } catch (err) {
+    console.error('[Firebase] Bulk push failed:', (err as Error).message);
+    return { successCount: 0, results: [] };
   }
 }
 
@@ -75,39 +145,8 @@ export async function sendBulkPushNotifications(
   body: string,
   data?: Record<string, string>
 ): Promise<number> {
-  if (!isFirebaseInitialized) return 0;
-
-  try {
-    const { getPool } = await import('../config/database.js');
-    const pool = getPool();
-
-    if (userIds.length === 0) return 0;
-
-    const placeholders = userIds.map(() => '?').join(',');
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, fcm_token FROM users WHERE id IN (${placeholders}) AND fcm_token IS NOT NULL AND fcm_token != ''`,
-      userIds
-    );
-
-    const validTokens = rows.filter((r) => r.fcm_token);
-    if (validTokens.length === 0) return 0;
-
-    const tokens = validTokens.map((r) => r.fcm_token as string);
-    const multicastMessage: admin.messaging.MulticastMessage = {
-      notification: { title, body },
-      tokens,
-    };
-
-    if (data) {
-      multicastMessage.data = data;
-    }
-
-    const response = await admin.messaging().sendEachForMulticast(multicastMessage);
-    return response.successCount;
-  } catch (err) {
-    console.error('[Firebase] Bulk push failed:', (err as Error).message);
-    return 0;
-  }
+  const result = await sendBulkPushNotificationsDetailed(userIds, title, body, data);
+  return result.successCount;
 }
 
 export { isFirebaseInitialized };

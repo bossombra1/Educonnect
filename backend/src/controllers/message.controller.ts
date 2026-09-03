@@ -17,12 +17,7 @@ function numberValues(value: unknown): number[] {
 }
 
 function attachmentsFromRequest(req: Request): Array<{ file_name: string; file_url: string; file_type: string; file_size: number }> {
-  return (req.files as any[] || []).map((f) => ({
-    file_name: f.originalname,
-    file_url: f.path,
-    file_type: f.mimetype?.startsWith('image') ? 'image' : f.mimetype === 'application/pdf' ? 'pdf' : 'other',
-    file_size: Number(f.size) || 0,
-  }));
+  return (req.files as any[] || []).map((f) => ({ file_name: f.originalname, file_url: f.path, file_type: f.mimetype?.startsWith('image') ? 'image' : f.mimetype === 'application/pdf' ? 'pdf' : 'other', file_size: Number(f.size) || 0 }));
 }
 
 function sendMessageError(res: Response, err: unknown): void {
@@ -122,9 +117,7 @@ export async function getMessageHistory(req: Request, res: Response): Promise<vo
     const status = req.query.status as string | undefined;
     const type = req.query.type as string | undefined;
     const filters = { date_from, date_to, class_id, priority, status, type };
-    const result = type
-      ? await getMessageHistoryWithType(user.establishmentId, filters, { page, limit })
-      : await messageService.getMessageHistory(user.establishmentId, filters, { page, limit });
+    const result = await getMessageHistoryWithType(user.establishmentId, filters, { page, limit });
     res.status(200).json({ success: true, data: result.data, pagination: { page: result.page, limit: result.limit, total: result.total, totalPages: result.totalPages } });
   } catch (err) { res.status(500).json({ success: false, error: (err as Error).message }); }
 }
