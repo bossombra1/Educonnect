@@ -67,7 +67,7 @@ export async function importStudentsFromExcel(fileBuffer: Buffer, establishmentI
         const studentId = studentResult.insertId;
         if ((telParent1 || telParent2) && parentRoleId) {
           const parentPassword = await bcrypt.hash(`P-${matricule}`, 10);
-          const [parentUser] = await conn.query<ResultSetHeader>('INSERT INTO users (establishment_id, role_id, matricule, first_name, last_name, phone, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)', [establishmentId, parentRoleId, matricule ? `P-${matricule}` : '', 'Parent', lastName, telParent1 || null, parentPassword]);
+          const [parentUser] = await conn.query<ResultSetHeader>('INSERT INTO users (establishment_id, role_id, matricule, first_name, last_name, phone, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)', [establishmentId, parentRoleId, `P-${matricule}`, 'Parent', lastName, telParent1 || null, parentPassword]);
           const [parent] = await conn.query<ResultSetHeader>('INSERT INTO parents (user_id, establishment_id, profession, is_primary_contact) VALUES (?, ?, ?, ?)', [parentUser.insertId, establishmentId, null, 1]);
           await conn.query("INSERT INTO parent_student (parent_id, student_id, priority, is_emergency_contact) VALUES (?, ?, 'parent1', 1)", [parent.insertId, studentId]);
           if (telParent2 && telParent2 !== telParent1) {
