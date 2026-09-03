@@ -2,16 +2,24 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { MessagePriority, DeliveryStatus, UserRole } from '@/types';
 
+function toValidDate(value: string | Date): Date | null {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export function formatDate(date: string | Date): string {
-  return format(new Date(date), 'dd MMM yyyy', { locale: fr });
+  const validDate = toValidDate(date);
+  return validDate ? format(validDate, 'dd MMM yyyy', { locale: fr }) : 'Date invalide';
 }
 
 export function formatDateTime(date: string | Date): string {
-  return format(new Date(date), 'dd MMM yyyy à HH:mm', { locale: fr });
+  const validDate = toValidDate(date);
+  return validDate ? format(validDate, 'dd MMM yyyy à HH:mm', { locale: fr }) : 'Date invalide';
 }
 
 export function formatRelative(date: string | Date): string {
-  return formatDistanceToNow(new Date(date), { addSuffix: true, locale: fr });
+  const validDate = toValidDate(date);
+  return validDate ? formatDistanceToNow(validDate, { addSuffix: true, locale: fr }) : 'Date invalide';
 }
 
 export function formatPhone(phone?: string): string {

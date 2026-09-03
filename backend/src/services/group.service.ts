@@ -14,7 +14,7 @@ export async function createGroup(data: CreateGroupInput, establishmentId: numbe
       const [validMembers] = await conn.query<RowDataPacket[]>(`SELECT id FROM users WHERE establishment_id = ? AND id IN (${placeholders})`, [establishmentId, ...requestedUserIds]);
       if (validMembers.length !== requestedUserIds.length) throw new Error('Un ou plusieurs membres appartiennent à un autre établissement ou n’existent pas.');
     }
-    const [result] = await conn.query<ResultSetHeader>(`INSERT INTO groups (establishment_id, name, description, group_type, filters) VALUES (?, ?, ?, ?, ?)`, [establishmentId, data.name, data.description || null, data.group_type, filtersJson]);
+    const [result] = await conn.query<ResultSetHeader>('INSERT INTO `groups` (establishment_id, name, description, group_type, filters) VALUES (?, ?, ?, ?, ?)', [establishmentId, data.name, data.description || null, data.group_type, filtersJson]);
     const groupId = result.insertId;
     if (requestedUserIds.length > 0) {
       await conn.query('INSERT INTO group_members (group_id, user_id) VALUES ?', [requestedUserIds.map((userId) => [groupId, userId])]);
@@ -70,7 +70,7 @@ async function resolveGroupMembersQuery(conn: any, groupType: string, filters: s
 
 export async function resolveGroupMembers(groupId: number, establishmentId?: number): Promise<number[]> {
   const pool = getPool();
-  const [group] = await pool.query<RowDataPacket[]>(`SELECT * FROM groups WHERE id = ?${establishmentId !== undefined ? ' AND establishment_id = ?' : ''}`, establishmentId !== undefined ? [groupId, establishmentId] : [groupId]);
+  const [group] = await pool.query<RowDataPacket[]>(`SELECT * FROM \`groups\` WHERE id = ?${establishmentId !== undefined ? ' AND establishment_id = ?' : ''}`, establishmentId !== undefined ? [groupId, establishmentId] : [groupId]);
   if (group.length === 0) return [];
   const g = group[0];
   if (g.group_type === 'custom') {
@@ -91,15 +91,15 @@ export async function resolveGroupMembers(groupId: number, establishmentId?: num
 export async function getGroups(establishmentId: number, options?: PaginationOptions): Promise<PaginationResult> {
   const pool = getPool();
   const page = Math.max(1, options?.page || 1); const limit = Math.min(100, Math.max(1, options?.limit || 50)); const offset = (page - 1) * limit;
-  const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) as total FROM groups WHERE establishment_id = ?', [establishmentId]);
+  const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) as total FROM `groups` WHERE establishment_id = ?', [establishmentId]);
   const total = Number(countRows[0].total);
-  const [groups] = await pool.query<RowDataPacket[]>(`SELECT g.*, (SELECT COUNT(*) FROM group_members WHERE group_id = g.id) as member_count FROM groups g WHERE g.establishment_id = ? ORDER BY g.created_at DESC LIMIT ? OFFSET ?`, [establishmentId, limit, offset]);
+  const [groups] = await pool.query<RowDataPacket[]>(`SELECT g.*, (SELECT COUNT(*) FROM group_members WHERE group_id = g.id) as member_count FROM \`groups\` g WHERE g.establishment_id = ? ORDER BY g.created_at DESC LIMIT ? OFFSET ?`, [establishmentId, limit, offset]);
   return { data: groups, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function getGroupById(groupId: number, establishmentId: number): Promise<any> {
   const pool = getPool();
-  const [groups] = await pool.query<RowDataPacket[]>(`SELECT g.*, (SELECT COUNT(*) FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = g.id AND u.establishment_id = g.establishment_id) as member_count FROM groups g WHERE g.id = ? AND g.establishment_id = ?`, [groupId, establishmentId]);
+  const [groups] = await pool.query<RowDataPacket[]>(`SELECT g.*, (SELECT COUNT(*) FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = g.id AND u.establishment_id = g.establishment_id) as member_count FROM \`groups\` g WHERE g.id = ? AND g.establishment_id = ?`, [groupId, establishmentId]);
   return groups.length > 0 ? groups[0] : null;
 }
 
@@ -108,7 +108,7 @@ export async function updateGroup(groupId: number, data: Partial<CreateGroupInpu
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [groupRows] = await conn.query<RowDataPacket[]>('SELECT establishment_id FROM groups WHERE id = ? AND establishment_id = ?', [groupId, establishmentId]);
+    const [groupRows] = await conn.query<RowDataPacket[]>('SELECT establishment_id FROM `groups` WHERE id = ? AND establishment_id = ?', [groupId, establishmentId]);
     if (groupRows.length === 0) return null;
     if (data.user_ids !== undefined) {
       const requestedUserIds = [...new Set(data.user_ids)];
@@ -123,7 +123,7 @@ export async function updateGroup(groupId: number, data: Partial<CreateGroupInpu
     if (data.group_type !== undefined) { fields.push('group_type = ?'); params.push(data.group_type); }
     if (data.description !== undefined) { fields.push('description = ?'); params.push(data.description); }
     if (data.filters !== undefined) { fields.push('filters = ?'); params.push(data.filters ? JSON.stringify(data.filters) : null); }
-    if (fields.length > 0) { params.push(groupId, establishmentId); await conn.query(`UPDATE groups SET ${fields.join(', ')} WHERE id = ? AND establishment_id = ?`, params); }
+    if (fields.length > 0) { params.push(groupId, establishmentId); await conn.query(`UPDATE \`groups\` SET ${fields.join(', ')} WHERE id = ? AND establishment_id = ?`, params); }
     if (data.user_ids !== undefined) {
       await conn.query('DELETE FROM group_members WHERE group_id = ?', [groupId]);
       const ids = [...new Set(data.user_ids)];
@@ -139,10 +139,10 @@ export async function deleteGroup(groupId: number, establishmentId: number): Pro
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [groupRows] = await conn.query<RowDataPacket[]>('SELECT id FROM groups WHERE id = ? AND establishment_id = ?', [groupId, establishmentId]);
+    const [groupRows] = await conn.query<RowDataPacket[]>('SELECT id FROM `groups` WHERE id = ? AND establishment_id = ?', [groupId, establishmentId]);
     if (groupRows.length === 0) return false;
     await conn.query('DELETE FROM group_members WHERE group_id = ?', [groupId]);
-    const [result] = await conn.query<ResultSetHeader>('DELETE FROM groups WHERE id = ? AND establishment_id = ?', [groupId, establishmentId]);
+    const [result] = await conn.query<ResultSetHeader>('DELETE FROM `groups` WHERE id = ? AND establishment_id = ?', [groupId, establishmentId]);
     await conn.commit();
     return result.affectedRows > 0;
   } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
@@ -151,8 +151,8 @@ export async function deleteGroup(groupId: number, establishmentId: number): Pro
 export async function getGroupMembers(groupId: number, establishmentId: number, options?: PaginationOptions): Promise<PaginationResult> {
   const pool = getPool();
   const page = Math.max(1, options?.page || 1); const limit = Math.min(100, Math.max(1, options?.limit || 50)); const offset = (page - 1) * limit;
-  const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) as total FROM group_members gm JOIN groups g ON g.id = gm.group_id WHERE gm.group_id = ? AND g.establishment_id = ?', [groupId, establishmentId]);
+  const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) as total FROM group_members gm JOIN `groups` g ON g.id = gm.group_id WHERE gm.group_id = ? AND g.establishment_id = ?', [groupId, establishmentId]);
   const total = Number(countRows[0].total);
-  const [members] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, r.name as role_name FROM group_members gm JOIN groups g ON g.id = gm.group_id JOIN users u ON u.id = gm.user_id JOIN roles r ON r.id = u.role_id WHERE gm.group_id = ? AND g.establishment_id = ? AND u.establishment_id = g.establishment_id ORDER BY u.first_name, u.last_name LIMIT ? OFFSET ?`, [groupId, establishmentId, limit, offset]);
+  const [members] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, r.name as role_name FROM group_members gm JOIN \`groups\` g ON g.id = gm.group_id JOIN users u ON u.id = gm.user_id JOIN roles r ON r.id = u.role_id WHERE gm.group_id = ? AND g.establishment_id = ? AND u.establishment_id = g.establishment_id ORDER BY u.first_name, u.last_name LIMIT ? OFFSET ?`, [groupId, establishmentId, limit, offset]);
   return { data: members, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
