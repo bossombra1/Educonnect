@@ -1,8 +1,7 @@
-import { Response, NextFunction } from 'express';
-import { RequestWithUser } from '../types/index.js';
+import { Request, Response, NextFunction, RequestHandler } from 'express';
 
-export function requireRole(...allowedRoles: string[]) {
-  return (req: RequestWithUser, res: Response, next: NextFunction): void => {
+export function requireRole(...allowedRoles: string[]): RequestHandler {
+  return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ success: false, error: 'Authentification requise.' });
       return;
@@ -17,10 +16,10 @@ export function requireRole(...allowedRoles: string[]) {
   };
 }
 
-export function requireAdmin() {
+export function requireAdmin(): RequestHandler {
   return requireRole('ADMIN', 'SUPER_ADMIN');
 }
 
-export function requireMobileUser() {
+export function requireMobileUser(): RequestHandler {
   return requireRole('PARENT', 'STUDENT', 'STAFF');
 }
