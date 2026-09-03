@@ -1,13 +1,13 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
-import { RequestWithUser, JwtPayload } from '../types/index.js';
+import { JwtPayload } from '../types/index.js';
 
-export function authenticate(
-  req: RequestWithUser,
+export const authenticate: RequestHandler = (
+  req: Request,
   res: Response,
   next: NextFunction
-): void {
+): void => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -19,7 +19,7 @@ export function authenticate(
 
   try {
     const decoded = jwt.verify(token, env.jwt.secret) as JwtPayload;
-    req.user = decoded;
+    req.user = { ...decoded, email: req.user?.email ?? '' };
     next();
   } catch (err) {
     if (err instanceof jwt.TokenExpiredError) {
@@ -30,15 +30,15 @@ export function authenticate(
       res.status(401).json({ success: false, error: 'Token invalide.' });
       return;
     }
-    res.status(401).json({ success: false, error: 'Erreur d\'authentification.' });
+    res.status(401).json({ success: false, error: "Erreur d'authentification." });
   }
-}
+};
 
-export function optionalAuth(
-  req: RequestWithUser,
-  res: Response,
+export const optionalAuth: RequestHandler = (
+  req: Request,
+  _res: Response,
   next: NextFunction
-): void {
+): void => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     next();
@@ -47,9 +47,9 @@ export function optionalAuth(
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, env.jwt.secret) as JwtPayload;
-    req.user = decoded;
+    req.user = { ...decoded, email: req.user?.email ?? '' };
   } catch {
     // Ignore invalid token for optional auth
   }
   next();
-}
+};

@@ -1,6 +1,6 @@
 import { getPool } from '../config/database.js';
 import { PaginationOptions, PaginationResult, CreateGroupInput } from '../types/index.js';
-import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import { RowDataPacket, ResultSetHeader, PoolConnection } from 'mysql2/promise';
 
 export async function createGroup(data: CreateGroupInput, establishmentId: number): Promise<any> {
   const pool = getPool();
@@ -28,7 +28,7 @@ export async function createGroup(data: CreateGroupInput, establishmentId: numbe
   } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
 }
 
-async function resolveGroupMembersQuery(conn: any, groupType: string, filters: string | null, establishmentId: number): Promise<number[]> {
+async function resolveGroupMembersQuery(conn: PoolConnection, groupType: string, filters: string | null, establishmentId: number): Promise<number[]> {
   let query = '';
   const params: any[] = [establishmentId];
   let filterData: any = {};
@@ -65,7 +65,7 @@ async function resolveGroupMembersQuery(conn: any, groupType: string, filters: s
     default: return [];
   }
   const [rows] = await conn.query<RowDataPacket[]>(query, params);
-  return rows.map((r) => Number(r.id));
+  return rows.map((r: RowDataPacket) => Number(r.id));
 }
 
 export async function resolveGroupMembers(groupId: number, establishmentId?: number): Promise<number[]> {

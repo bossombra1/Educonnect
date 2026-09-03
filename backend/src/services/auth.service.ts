@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { type SignOptions } from 'jsonwebtoken';
 import { getPool } from '../config/database.js';
 import { env } from '../config/env.js';
 import { RowDataPacket } from 'mysql2/promise';
@@ -23,10 +23,7 @@ export async function login(
     [email]
   );
 
-  if (users.length === 0) {
-    throw new Error('Email ou mot de passe incorrect.');
-  }
-
+  if (users.length === 0) throw new Error('Email ou mot de passe incorrect.');
   const user = users[0];
 
   if (!['ADMIN', 'SUPER_ADMIN'].includes(user.role_name)) {
@@ -34,15 +31,9 @@ export async function login(
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.password_hash);
-  if (!isPasswordValid) {
-    throw new Error('Email ou mot de passe incorrect.');
-  }
+  if (!isPasswordValid) throw new Error('Email ou mot de passe incorrect.');
 
-  // Update last_login_at
-  await pool.query(
-    'UPDATE users SET last_login_at = NOW() WHERE id = ?',
-    [user.id]
-  );
+  await pool.query('UPDATE users SET last_login_at = NOW() WHERE id = ?', [user.id]);
 
   const payload: JwtPayload = {
     userId: user.id,
@@ -51,7 +42,7 @@ export async function login(
   };
 
   const token = jwt.sign(payload, env.jwt.secret, {
-    expiresIn: env.jwt.expiresIn,
+    expiresIn: env.jwt.expiresIn as SignOptions['expiresIn'],
   });
 
   await pool.query(
@@ -60,15 +51,9 @@ export async function login(
   );
 
   const userData = {
-    id: user.id,
-    email: user.email,
-    first_name: user.first_name,
-    last_name: user.last_name,
-    matricule: user.matricule,
-    avatar_url: user.avatar_url,
-    role: user.role_name,
-    establishment_id: user.establishment_id,
-    establishment_name: user.establishment_name,
+    id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name,
+    matricule: user.matricule, avatar_url: user.avatar_url, role: user.role_name,
+    establishment_id: user.establishment_id, establishment_name: user.establishment_name,
   };
 
   return { token, user: userData };
@@ -89,59 +74,41 @@ export async function getProfile(userId: number): Promise<any> {
     [userId]
   );
 
-  if (users.length === 0) {
-    throw new Error('Utilisateur non trouvé.');
-  }
-
+  if (users.length === 0) throw new Error('Utilisateur non trouvé.');
   const user = users[0];
   let profileData: Record<string, any> = { ...user };
 
   if (user.role_name === 'STUDENT') {
-    // Students table: id, user_id, class_id, establishment_id, matricule_scolaire, admission_date, status
     const [students] = await pool.query<RowDataPacket[]>(
       `SELECT s.id as student_id, s.matricule_scolaire, s.status as student_status,
               c.id as class_id, c.name as class_name, c.level, c.section
-       FROM students s
-       LEFT JOIN classes c ON c.id = s.class_id
-       WHERE s.user_id = ?`,
+       FROM students s LEFT JOIN classes c ON c.id = s.class_id WHERE s.user_id = ?`,
       [userId]
     );
-    if (students.length > 0) {
-      profileData = { ...profileData, ...students[0] };
-    }
+    if (students.length > 0) profileData = { ...profileData, ...students[0] };
   } else if (user.role_name === 'PARENT') {
-    // Parents table: id, user_id, establishment_id, profession, is_primary_contact
     const [parents] = await pool.query<RowDataPacket[]>(
       'SELECT id as parent_id, profession, is_primary_contact FROM parents WHERE user_id = ?',
       [userId]
     );
-    if (parents.length > 0) {
-      profileData = { ...profileData, ...parents[0] };
-    }
+    if (parents.length > 0) profileData = { ...profileData, ...parents[0] };
 
-    // Get children via parent_student -> students -> classes
     const [children] = await pool.query<RowDataPacket[]>(
       `SELECT s.id as student_id, u_s.first_name, u_s.last_name, s.matricule_scolaire,
               s.status as student_status, c.name as class_name, c.level, c.section,
               ps.priority, ps.is_emergency_contact
-       FROM parents p
-       JOIN parent_student ps ON ps.parent_id = p.id
-       JOIN students s ON s.id = ps.student_id
-       JOIN users u_s ON u_s.id = s.user_id
-       LEFT JOIN classes c ON c.id = s.class_id
-       WHERE p.user_id = ?`,
+       FROM parents p JOIN parent_student ps ON ps.parent_id = p.id
+       JOIN students s ON s.id = ps.student_id JOIN users u_s ON u_s.id = s.user_id
+       LEFT JOIN classes c ON c.id = s.class_id WHERE p.user_id = ?`,
       [userId]
     );
     profileData.children = children;
   } else if (user.role_name === 'STAFF') {
-    // Staff table: id, user_id, establishment_id, role_title, department
     const [staff] = await pool.query<RowDataPacket[]>(
       'SELECT id as staff_id, role_title, department FROM staff WHERE user_id = ?',
       [userId]
     );
-    if (staff.length > 0) {
-      profileData = { ...profileData, ...staff[0] };
-    }
+    if (staff.length > 0) profileData = { ...profileData, ...staff[0] };
   }
 
   return profileData;
