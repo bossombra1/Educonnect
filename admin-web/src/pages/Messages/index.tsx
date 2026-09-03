@@ -22,7 +22,6 @@ const priorityOptions: { value: MessagePriority; label: string }[] = [
   { value: 'normal', label: 'Normal' }, { value: 'important', label: 'Important' }, { value: 'urgent', label: 'Urgent' },
 ];
 type RecipientTab = 'groups' | 'classes' | 'roles' | 'individuals';
-
 type ApiErrorLike = { response?: { data?: { error?: string; message?: string } } };
 function getApiErrorMessage(error: unknown, fallback: string): string {
   const apiError = error as ApiErrorLike;
@@ -45,9 +44,7 @@ export default function MessagesPage() {
 
   const loadRecipients = async () => {
     setLoadError(null);
-    const results = await Promise.allSettled([
-      groupService.getGroups(), classService.getClasses(), userService.getUsers({ limit: 200 }),
-    ]);
+    const results = await Promise.allSettled([groupService.getGroups(), classService.getClasses(), userService.getUsers({ limit: 200 })]);
     const failures: string[] = [];
     if (results[0].status === 'fulfilled') setGroups(results[0].value); else failures.push('groupes');
     if (results[1].status === 'fulfilled') setClasses(results[1].value); else failures.push('classes');
@@ -63,10 +60,11 @@ export default function MessagesPage() {
   const toggleRole = (role: UserRole) => setSelectedRoles(prev => prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]);
   const toggleUser = (id: string) => setSelectedUserIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   const [userSearch, setUserSearch] = useState('');
-  const normalizedUserSearch = userSearch.trim().toLowerCase();
-  const filteredUsers = normalizedUserSearch
-    ? users.filter(u => `${u.firstName} ${u.lastName} ${u.email || ''} ${u.phone || ''} ${u.matricule || ''}`.toLowerCase().includes(normalizedUserSearch))
-    : users;
+  const normalizedSearch = userSearch.trim().toLowerCase();
+  const filteredUsers = users.filter(u => {
+    if (!normalizedSearch) return true;
+    return [u.firstName, u.lastName, u.email, u.phone, u.matricule, u.role].filter(Boolean).some(value => String(value).toLowerCase().includes(normalizedSearch));
+  });
 
   const buildFormData = (): FormData => {
     const fd = new FormData(); fd.append('content', content); fd.append('type', msgType); fd.append('priority', priority);
@@ -110,7 +108,16 @@ export default function MessagesPage() {
           <div className="flex flex-col-reverse gap-2 border-t border-line pt-3 sm:flex-row sm:justify-end"><Button variant="ghost" onClick={handleDraft}><Save className="h-4 w-4" /> Brouillon</Button><Button variant="secondary" onClick={() => setScheduleModal(true)} className="!bg-slate-700 !text-white hover:!bg-slate-800"><Clock className="h-4 w-4" /> Programmer</Button><Button onClick={handleSend} loading={sending}><Send className="h-4 w-4" /> Envoyer maintenant</Button></div>
         </div>
       </Card>
-      <Modal open={scheduleModal} onClose={() => setScheduleModal(false)} title="Programmer l'envoi" size="sm"><div className="space-y-3"><Input label="Date" type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} /><Input label="Heure" type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} /><div className="flex justify-end gap-2 pt-1"><Button variant="secondary" onClick={() => setScheduleModal(false)}>Annuler</Button><Button onClick={handleSchedule} loading={scheduling} className="!bg-slate-700 !text-white hover:!bg-slate-800"><Clock className="h-4 w-4" /> Programmer</Button></div></Modal>
+      <Modal open={scheduleModal} onClose={() => setScheduleModal(false)} title="Programmer l'envoi" size="sm">
+        <div className="space-y-3">
+          <Input label="Date" type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} />
+          <Input label="Heure" type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} />
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="secondary" onClick={() => setScheduleModal(false)}>Annuler</Button>
+            <Button onClick={handleSchedule} loading={scheduling} className="!bg-slate-700 !text-white hover:!bg-slate-800"><Clock className="h-4 w-4" /> Programmer</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
