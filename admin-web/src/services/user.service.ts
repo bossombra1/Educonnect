@@ -5,7 +5,25 @@ interface UserParams { page?: number; limit?: number; role?: UserRole; classId?:
 type ApiUser = Record<string, any>;
 
 function normalizeUser(raw: ApiUser): User {
-  return { ...raw, id: String(raw.id), firstName: raw.firstName ?? raw.first_name ?? '', lastName: raw.lastName ?? raw.last_name ?? '', email: raw.email ?? '', phone: raw.phone ?? undefined, role: (raw.role ?? raw.role_name ?? 'STAFF') as UserRole, isActive: raw.isActive ?? Boolean(raw.is_active), createdAt: raw.createdAt ?? raw.created_at ?? undefined, updatedAt: raw.updatedAt ?? raw.updated_at ?? undefined, matricule: raw.matricule ?? raw.matricule_scolaire ?? undefined, classId: raw.classId ?? (raw.class_id != null ? String(raw.class_id) : undefined), className: raw.className ?? raw.class_name ?? undefined } as User;
+  return {
+    ...raw,
+    id: String(raw.id),
+    firstName: raw.firstName ?? raw.first_name ?? '',
+    lastName: raw.lastName ?? raw.last_name ?? '',
+    email: raw.email ?? '',
+    phone: raw.phone ?? undefined,
+    role: (raw.role ?? raw.role_name ?? 'STAFF') as UserRole,
+    isActive: raw.isActive ?? Boolean(raw.is_active),
+    createdAt: raw.createdAt ?? raw.created_at ?? undefined,
+    updatedAt: raw.updatedAt ?? raw.updated_at ?? undefined,
+    matricule: raw.matricule ?? undefined,
+    matriculeScolaire: raw.matriculeScolaire ?? raw.matricule_scolaire ?? undefined,
+    classId: raw.classId ?? (raw.class_id != null ? String(raw.class_id) : undefined),
+    className: raw.className ?? raw.class_name ?? undefined,
+    studentStatus: raw.studentStatus ?? raw.student_status ?? undefined,
+    roleTitle: raw.roleTitle ?? raw.role_title ?? undefined,
+    department: raw.department ?? raw.department_name ?? raw.departement ?? undefined,
+  } as User;
 }
 
 function toApiPayload(input: Record<string, any>): Record<string, any> {
