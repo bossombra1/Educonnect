@@ -14,6 +14,7 @@ import type { Message } from '@/types';
 export default function HistoryPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [priorityFilter, setPriorityFilter] = useState('');
@@ -22,10 +23,12 @@ export default function HistoryPage() {
   const [endDate, setEndDate] = useState('');
   const [detailMsg, setDetailMsg] = useState<Message | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   const fetchMessages = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const params: Record<string, string | number> = { page, limit: 15, status: 'sent' };
       if (priorityFilter) params.priority = priorityFilter;
@@ -35,18 +38,24 @@ export default function HistoryPage() {
       const res = await messageService.getMessageHistory(params as any);
       setMessages(res.data);
       setTotalPages(res.pagination.totalPages);
-    } catch { setMessages([]); }
-    finally { setLoading(false); }
+    } catch (error) {
+      console.error('Erreur lors du chargement de l’historique:', error);
+      setLoadError('Impossible de charger l’historique des messages.');
+    } finally { setLoading(false); }
   }, [page, priorityFilter, typeFilter, startDate, endDate]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
   const showDetail = async (msg: Message) => {
     setDetailLoading(true);
+    setDetailError(null);
     setDetailMsg(msg);
-    try { setDetailMsg(await messageService.getMessage(msg.id)); }
-    catch {}
-    finally { setDetailLoading(false); }
+    try {
+      setDetailMsg(await messageService.getMessage(msg.id));
+    } catch (error) {
+      console.error('Erreur lors du chargement du message:', error);
+      setDetailError('Impossible de charger les détails de ce message.');
+    } finally { setDetailLoading(false); }
   };
 
   const clearFilters = () => {
@@ -62,13 +71,13 @@ export default function HistoryPage() {
     { key: 'type', header: 'Type', render: (m) => <Badge variant={typeVariant[m.type] || 'default'}>{typeLabel[m.type] || m.type}</Badge> },
     { key: 'priority', header: 'Priorité', render: (m) => <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${getPriorityColor(m.priority)}`}>{getPriorityLabel(m.priority)}</span> },
     { key: 'recipients', header: 'Destinataires', render: (m) => <span className="text-sm text-gray-600">{m.totalRecipients}</span> },
-    { key: 'sentAt', header: 'Date d\'envoi', render: (m) => <span className="text-sm text-gray-600">{formatDateTime(m.sentAt || m.createdAt)}</span> },
+    { key: 'sentAt', header: 'Date d’envoi', render: (m) => <span className="text-sm text-gray-600">{formatDateTime(m.sentAt || m.createdAt)}</span> },
     { key: 'readRate', header: 'Taux de lecture', render: (m) => {
       const rate = m.totalRecipients > 0 ? (m.readCount / m.totalRecipients) * 100 : 0;
       return <ProgressBar value={rate} color={rate >= 70 ? 'green' : rate >= 40 ? 'amber' : 'red'} />;
     }},
     { key: 'actions', header: 'Actions', className: 'text-right', render: (m) => (
-      <button onClick={() => showDetail(m)} className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-primary"><Eye className="h-4 w-4" /></button>
+      <button aria-label={`Voir les détails de ${m.title || 'ce message'}`} onClick={() => showDetail(m)} className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-primary"><Eye className="h-4 w-4" /></button>
     )},
   ];
 
@@ -80,6 +89,13 @@ export default function HistoryPage() {
           {hasFilters && <button onClick={clearFilters} className="text-sm text-red-500 hover:text-red-700">Réinitialiser</button>}
         </div>
       </div>
+
+      {loadError && (
+        <div role="alert" className="flex items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span>{loadError}</span>
+          <Button variant="secondary" size="sm" onClick={fetchMessages}>Réessayer</Button>
+        </div>
+      )}
 
       {showFilters && (
         <Card>
@@ -101,7 +117,12 @@ export default function HistoryPage() {
       </div>
 
       <Modal open={!!detailMsg} onClose={() => setDetailMsg(null)} title={detailMsg?.title || 'Détails du message'} size="lg">
-        {detailLoading ? <div className="py-8 text-center text-gray-400">Chargement...</div> : detailMsg ? (
+        {detailLoading ? <div className="py-8 text-center text-gray-400">Chargement...</div> : detailError ? (
+          <div role="alert" className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <p>{detailError}</p>
+            <Button variant="secondary" size="sm" onClick={() => detailMsg && showDetail(detailMsg)}>Réessayer</Button>
+          </div>
+        ) : detailMsg ? (
           <div className="space-y-4">
             <div><span className="text-sm text-gray-500">Contenu :</span><p className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{detailMsg.content}</p></div>
             <div className="grid grid-cols-2 gap-4 text-sm">
