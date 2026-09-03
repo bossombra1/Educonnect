@@ -7,6 +7,8 @@ import { requireAdmin } from '../middleware/rbac.js';
 const router = Router();
 
 router.get('/', authenticate, requireAdmin(), userController.getAllUsers);
+// Backward-compatible alias for older admin-web bundles still requesting /users/list.
+router.get('/list', authenticate, requireAdmin(), userController.getAllUsers);
 router.get('/search', authenticate, requireAdmin(), userController.searchUsers);
 router.get('/students/list', authenticate, requireAdmin(), userController.getStudents);
 router.get('/students/by-parent/:parentId', authenticate, requireAdmin(), getStudentsByParent);
