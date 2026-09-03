@@ -9,13 +9,13 @@ interface ExcelRow {
 }
 const DEFAULT_SCHOOL_YEAR = '2025-2026';
 
-export async function importStudentsFromExcel(fileBuffer: ArrayBuffer, establishmentId: number, importedBy: number): Promise<ImportResult> {
+export async function importStudentsFromExcel(fileBuffer: Buffer, establishmentId: number, importedBy: number): Promise<ImportResult> {
   const pool = getPool();
   const result: ImportResult = { totalRows: 0, successCount: 0, failCount: 0, errors: [] };
   const [importer] = await pool.query<RowDataPacket[]>('SELECT id FROM users WHERE id = ? AND establishment_id = ?', [importedBy, establishmentId]);
   if (importer.length === 0) throw new Error('Utilisateur importateur invalide pour cet établissement.');
   let workbook: XLSX.WorkBook;
-  try { workbook = XLSX.read(fileBuffer, { type: 'array' }); } catch { throw new Error('Fichier Excel invalide ou corrompu.'); }
+  try { workbook = XLSX.read(fileBuffer, { type: 'buffer' }); } catch { throw new Error('Fichier Excel invalide ou corrompu.'); }
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) throw new Error('Le fichier Excel ne contient aucune feuille.');
   const rows = XLSX.utils.sheet_to_json<ExcelRow>(workbook.Sheets[sheetName]);
@@ -87,8 +87,8 @@ export async function importStudentsFromExcel(fileBuffer: ArrayBuffer, establish
   return result;
 }
 
-export async function previewImport(fileBuffer: ArrayBuffer): Promise<{ totalRows: number; columns: string[]; sampleRows: Record<string, any>[] }> {
-  const workbook = XLSX.read(fileBuffer, { type: 'array' }); const sheetName = workbook.SheetNames[0]; const sheet = workbook.Sheets[sheetName!]; const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet); return { totalRows: rows.length, columns: rows.length > 0 ? Object.keys(rows[0]) : [], sampleRows: rows.slice(0, 5) };
+export async function previewImport(fileBuffer: Buffer): Promise<{ totalRows: number; columns: string[]; sampleRows: Record<string, any>[] }> {
+  const workbook = XLSX.read(fileBuffer, { type: 'buffer' }); const sheetName = workbook.SheetNames[0]; const sheet = workbook.Sheets[sheetName!]; const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet); return { totalRows: rows.length, columns: rows.length > 0 ? Object.keys(rows[0]) : [], sampleRows: rows.slice(0, 5) };
 }
 
 export async function getImportHistory(establishmentId: number, pagination: { page?: number; limit?: number }): Promise<{ data: any[]; total: number; page: number; limit: number; totalPages: number }> {
