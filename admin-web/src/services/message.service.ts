@@ -17,6 +17,11 @@ export const messageService = {
     return data;
   },
 
+  async getScheduledMessages(params: Pick<MessageParams, 'page' | 'limit' | 'status'> = {}): Promise<PaginatedResponse<any>> {
+    const { data } = await apiClient.get<PaginatedResponse<any>>('/scheduled-messages', { params });
+    return data;
+  },
+
   async getMessage(id: string): Promise<Message> {
     const { data } = await apiClient.get<ApiResponse<Message>>(`/messages/${id}`);
     return data.data;
