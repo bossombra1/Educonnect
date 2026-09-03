@@ -1,6 +1,8 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import toast from 'react-hot-toast';
 
+const API_ERROR_EVENT = 'educonnect:api-error';
+
 const apiClient = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
@@ -22,8 +24,7 @@ apiClient.interceptors.response.use(
     const config = error.config as RetryableRequestConfig | undefined;
     const method = config?.method?.toLowerCase();
 
-    // A transient GET failure should not leave list/statistics pages in a false
-    // "empty" state. Retry once before surfacing the final error to the UI.
+    // Retry read-only requests once so transient failures do not become false empty states.
     if (
       config &&
       !config.__educonnectRetried &&
@@ -45,8 +46,10 @@ apiClient.interceptors.response.use(
         ? ((error.response.data as { error?: string; message?: string }).error ||
           (error.response.data as { error?: string; message?: string }).message)
         : undefined;
+    const finalMessage = message || 'Impossible de communiquer avec le serveur. Veuillez réessayer.';
 
-    toast.error(message || 'Impossible de communiquer avec le serveur. Veuillez réessayer.');
+    toast.error(finalMessage);
+    window.dispatchEvent(new CustomEvent(API_ERROR_EVENT, { detail: { message: finalMessage } }));
     return Promise.reject(error);
   }
 );
