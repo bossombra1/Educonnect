@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Upload, FileSpreadsheet, CheckCircle, XCircle, RotateCcw, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, FileSpreadsheet, CheckCircle, XCircle, RotateCcw, Clock, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import apiClient from '@/services/api';
+import { importService } from '@/services/import.service';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Table, { type Column } from '@/components/ui/Table';
@@ -23,6 +24,7 @@ export default function ImportPage() {
   const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importHistory, setImportHistory] = useState<ImportRecord[]>([]);
@@ -47,6 +49,18 @@ export default function ImportPage() {
 
   useEffect(() => { fetchHistory(historyPage); }, [historyPage, fetchHistory]);
 
+  const handleDownloadTemplate = async () => {
+    setDownloadingTemplate(true);
+    try {
+      await importService.downloadStudentsTemplate();
+      toast.success('Modèle Excel téléchargé.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Impossible de télécharger le modèle Excel.');
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  };
+
   const handleFileSelect = (files: File[]) => {
     if (!files.length) return;
     const selected = files[0];
@@ -66,18 +80,14 @@ export default function ImportPage() {
     setStep('importing');
     setImportProgress(15);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const { data } = await apiClient.post<{ success: boolean; data: ImportResult; message: string }>('/imports/students', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const result = await importService.importStudents(file);
       setImportProgress(100);
-      setImportResult(data.data);
+      setImportResult(result);
       setStep('result');
       await fetchHistory(1);
       setHistoryPage(1);
-      if (data.data.failCount === 0) toast.success(`${data.data.successCount} élève(s) importé(s) avec succès.`);
-      else toast.success(`${data.data.successCount} importé(s), ${data.data.failCount} ligne(s) en échec.`);
+      if (result.failCount === 0) toast.success(`${result.successCount} élève(s) importé(s) avec succès.`);
+      else toast.success(`${result.successCount} importé(s), ${result.failCount} ligne(s) en échec.`);
     } catch (error) {
       setStep('upload');
       setImportProgress(0);
@@ -136,6 +146,10 @@ export default function ImportPage() {
     </div>
 
     {step === 'upload' && <Card>
+      <div className="mb-4 flex flex-col gap-3 rounded-lg border border-blue-100 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div><p className="text-sm font-semibold text-blue-900">Modèle officiel Excel</p><p className="mt-1 text-xs text-blue-800">Utilisez le modèle EduConnect pour respecter automatiquement les colonnes et le format attendus.</p></div>
+        <Button variant="secondary" onClick={handleDownloadTemplate} loading={downloadingTemplate} className="shrink-0"><Download className="h-4 w-4" /> Télécharger le modèle</Button>
+      </div>
       <div onDrop={handleDrop} onDragOver={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()} className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-surface px-5 py-12 text-center transition hover:border-primary-300 focus-within:border-primary-300">
         <div className="mb-4 rounded-lg bg-primary-50 p-3"><Upload className="h-7 w-7 text-primary" /></div>
         <p className="text-sm font-semibold text-slate-900">Cliquez ou glissez votre fichier ici</p>

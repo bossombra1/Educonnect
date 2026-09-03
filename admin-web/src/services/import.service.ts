@@ -11,6 +11,21 @@ export const importService = {
     return data.data;
   },
 
+  async downloadStudentsTemplate(): Promise<void> {
+    const { data } = await apiClient.get<Blob>('/imports/students/template', {
+      responseType: 'blob',
+    });
+
+    const url = window.URL.createObjectURL(data);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'modele_import_eleves.xlsx';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
   async getImportHistory(): Promise<ImportResult[]> {
     const { data } = await apiClient.get<ApiResponse<ImportResult[]>>('/imports/history');
     return data.data;

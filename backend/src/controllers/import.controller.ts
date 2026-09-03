@@ -21,7 +21,6 @@ export async function importStudents(req: Request, res: Response): Promise<void>
       return;
     }
 
-    // file.buffer is available when using memoryStorage
     if (!file.buffer) {
       res.status(400).json({ success: false, error: 'Impossible de lire le fichier.' });
       return;
@@ -40,6 +39,18 @@ export async function importStudents(req: Request, res: Response): Promise<void>
     });
   } catch (err) {
     res.status(400).json({ success: false, error: (err as Error).message });
+  }
+}
+
+export async function downloadStudentsTemplate(_req: Request, res: Response): Promise<void> {
+  try {
+    const workbook = importService.generateStudentsImportTemplate();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="modele_import_eleves.xlsx"');
+    res.setHeader('Content-Length', workbook.length.toString());
+    res.status(200).send(workbook);
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Impossible de générer le modèle Excel.' });
   }
 }
 
