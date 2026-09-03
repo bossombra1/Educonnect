@@ -23,6 +23,13 @@ export const userService = {
   async getUsers(params: UserParams = {}): Promise<PaginatedResponse<User>> { const { data } = await apiClient.get<PaginatedResponse<ApiUser>>('/users', { params }); return { ...data, data: data.data.map(normalizeUser) } as PaginatedResponse<User>; },
   async getUser(id: string): Promise<User> { const { data } = await apiClient.get<ApiResponse<ApiUser>>(`/users/${id}`); return normalizeUser(data.data); },
   async getStudentsByParent(parentId: string): Promise<User[]> { const { data } = await apiClient.get<ApiResponse<ApiUser[]>>(`/users/students/by-parent/${parentId}`); return data.data.map(normalizeUser); },
+  async getParentsByStudent(studentId: string): Promise<User[]> { const { data } = await apiClient.get<ApiResponse<ApiUser[]>>(`/users/parents/by-student/${studentId}`); return data.data.map(normalizeUser); },
+  async linkParentStudent(parentId: string, studentId: string, priority: 'parent1' | 'parent2' = 'parent1', isEmergencyContact = false): Promise<void> {
+    await apiClient.post('/users/parent-student', { parentId, studentId, priority, isEmergencyContact });
+  },
+  async unlinkParentStudent(parentId: string, studentId: string): Promise<void> {
+    await apiClient.delete(`/users/parent-student/${parentId}/${studentId}`);
+  },
   async createUser(userData: Partial<User> & { password: string }): Promise<User> { const { data } = await apiClient.post<ApiResponse<ApiUser>>('/users', toApiPayload(userData as Record<string, any>)); return normalizeUser(data.data); },
   async updateUser(id: string, userData: Partial<User>): Promise<User> { const { data } = await apiClient.put<ApiResponse<ApiUser>>(`/users/${id}`, toApiPayload(userData as Record<string, any>)); return normalizeUser(data.data); },
   async deleteUser(id: string): Promise<void> { await apiClient.delete(`/users/${id}`); },
