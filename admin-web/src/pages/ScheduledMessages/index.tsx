@@ -35,7 +35,7 @@ export default function ScheduledMessagesPage() {
     { key: 'recipients', header: 'Destinataires', render: (sm) => <span className="text-xs text-slate-600">{sm.message?.totalRecipients ?? '—'}</span> },
     { key: 'scheduledAt', header: 'Date programmée', render: (sm) => <span className="text-xs text-slate-600">{formatDateTime(sm.scheduledAt)}</span> },
     { key: 'status', header: 'Statut', render: (sm) => <Badge variant={statusBadge[sm.status] || 'default'}>{statusLabel[sm.status] || sm.status}</Badge> },
-    { key: 'priority', header: 'Priorité', render: (sm) => <span className={cn(sm.message ? getPriorityColor(sm.message.priority) : '', 'text-xs')}>{sm.message ? getPriorityLabel(sm.message.priority) : '—'}</span> },
+    { key: 'priority', header: 'Priorité', render: (sm) => <span className={sm.message ? getPriorityColor(sm.message.priority) : ''}>{sm.message ? getPriorityLabel(sm.message.priority) : '—'}</span> },
     { key: 'actions', header: 'Actions', className: 'text-right', render: (sm) => <div className="flex items-center justify-end gap-1"><button type="button" aria-label={`Voir ${sm.message?.title || 'le message'}`} onClick={() => void showDetail(sm)} className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-primary focus-visible:outline-none"><Eye className="h-4 w-4" /></button>{sm.status === 'pending' && <button type="button" aria-label={`Annuler ${sm.message?.title || 'le message'}`} onClick={() => setCancelTarget(sm)} className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none"><XCircle className="h-4 w-4" /></button>}</div> },
   ];
 
