@@ -24,6 +24,17 @@ function attachmentsFromRequest(req: Request): Array<{ file_name: string; file_u
   }));
 }
 
+function sendMessageError(res: Response, err: unknown): void {
+  const error = err as Error;
+  const message = error?.message || 'Erreur lors du traitement du message.';
+  const clientError = /destinataire|groupe|date de programmation|contenu du message/i.test(message);
+  if (!clientError) console.error('[Messages] Erreur interne:', err);
+  res.status(clientError ? 400 : 500).json({
+    success: false,
+    error: clientError ? message : 'Une erreur interne est survenue lors du traitement du message.',
+  });
+}
+
 export async function getMessages(req: Request, res: Response): Promise<void> {
   try {
     const user = req.user as any;
@@ -68,7 +79,7 @@ export async function sendMessage(req: RequestWithUser, res: Response): Promise<
       message_type: body.type || body.message_type || 'text', priority: body.priority || 'normal', link_url: body.linkUrl || body.link_url || undefined,
     }, user.userId, user.establishmentId, recipientIds, attachments.length ? attachments : undefined);
     res.status(201).json({ success: true, data: result, message: 'Message envoyé avec succès.' });
-  } catch (err) { res.status(400).json({ success: false, error: (err as Error).message }); }
+  } catch (err) { sendMessageError(res, err); }
 }
 
 export async function scheduleMessage(req: Request, res: Response): Promise<void> {
@@ -88,7 +99,7 @@ export async function scheduleMessage(req: Request, res: Response): Promise<void
       title: body.title || undefined, content, message_type: body.type || body.message_type || 'text', priority: body.priority || 'normal', link_url: body.linkUrl || body.link_url || undefined,
     }, user.userId, user.establishmentId, recipientIds, scheduledDate.toISOString(), attachments);
     res.status(201).json({ success: true, data: result, message: 'Message programmé avec succès.' });
-  } catch (err) { res.status(400).json({ success: false, error: (err as Error).message }); }
+  } catch (err) { sendMessageError(res, err); }
 }
 
 export async function markAsRead(req: Request, res: Response): Promise<void> {
