@@ -20,14 +20,18 @@ export async function resolveRecipientIds(establishmentId: number, groupIds: unk
 
   if (groups.length) {
     const placeholders = groups.map(() => '?').join(',');
-    const [rows] = await pool.query<RowDataPacket[]>(`SELECT DISTINCT gm.user_id FROM group_members gm JOIN groups g ON g.id = gm.group_id JOIN users u ON u.id = gm.user_id WHERE gm.group_id IN (${placeholders}) AND g.establishment_id = ? AND u.establishment_id = ?`, [...groups, establishmentId, establishmentId]);
-    const [validGroups] = await pool.query<RowDataPacket[]>(`SELECT id FROM groups WHERE id IN (${placeholders}) AND establishment_id = ?`, [...groups, establishmentId]);
+    const [validGroups] = await pool.query<RowDataPacket[]>(`SELECT id FROM \`groups\` WHERE id IN (${placeholders}) AND establishment_id = ?`, [...groups, establishmentId]);
     if (validGroups.length !== groups.length) throw new Error('Un ou plusieurs groupes sont invalides pour cet établissement.');
+
+    const [rows] = await pool.query<RowDataPacket[]>(`SELECT DISTINCT gm.user_id FROM group_members gm JOIN \`groups\` g ON g.id = gm.group_id JOIN users u ON u.id = gm.user_id WHERE gm.group_id IN (${placeholders}) AND g.establishment_id = ? AND u.establishment_id = ?`, [...groups, establishmentId, establishmentId]);
     rows.forEach((row) => ids.add(Number(row.user_id)));
   }
 
   if (classes.length) {
     const placeholders = classes.map(() => '?').join(',');
+    const [validClasses] = await pool.query<RowDataPacket[]>(`SELECT id FROM classes WHERE id IN (${placeholders}) AND establishment_id = ?`, [...classes, establishmentId]);
+    if (validClasses.length !== classes.length) throw new Error('Une ou plusieurs classes sont invalides pour cet établissement.');
+
     const [rows] = await pool.query<RowDataPacket[]>(`SELECT s.user_id FROM students s JOIN users u ON u.id = s.user_id WHERE s.class_id IN (${placeholders}) AND s.establishment_id = ? AND u.establishment_id = ?`, [...classes, establishmentId, establishmentId]);
     rows.forEach((row) => ids.add(Number(row.user_id)));
   }
