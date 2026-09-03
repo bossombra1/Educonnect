@@ -22,7 +22,6 @@ export async function resolveRecipientIds(establishmentId: number, groupIds: unk
     const placeholders = groups.map(() => '?').join(',');
     const [validGroups] = await pool.query<RowDataPacket[]>(`SELECT id FROM \`groups\` WHERE id IN (${placeholders}) AND establishment_id = ?`, [...groups, establishmentId]);
     if (validGroups.length !== groups.length) throw new Error('Un ou plusieurs groupes sont invalides pour cet établissement.');
-
     const [rows] = await pool.query<RowDataPacket[]>(`SELECT DISTINCT gm.user_id FROM group_members gm JOIN \`groups\` g ON g.id = gm.group_id JOIN users u ON u.id = gm.user_id WHERE gm.group_id IN (${placeholders}) AND g.establishment_id = ? AND u.establishment_id = ?`, [...groups, establishmentId, establishmentId]);
     rows.forEach((row) => ids.add(Number(row.user_id)));
   }
@@ -31,7 +30,6 @@ export async function resolveRecipientIds(establishmentId: number, groupIds: unk
     const placeholders = classes.map(() => '?').join(',');
     const [validClasses] = await pool.query<RowDataPacket[]>(`SELECT id FROM classes WHERE id IN (${placeholders}) AND establishment_id = ?`, [...classes, establishmentId]);
     if (validClasses.length !== classes.length) throw new Error('Une ou plusieurs classes sont invalides pour cet établissement.');
-
     const [rows] = await pool.query<RowDataPacket[]>(`SELECT s.user_id FROM students s JOIN users u ON u.id = s.user_id WHERE s.class_id IN (${placeholders}) AND s.establishment_id = ? AND u.establishment_id = ?`, [...classes, establishmentId, establishmentId]);
     rows.forEach((row) => ids.add(Number(row.user_id)));
   }
@@ -57,8 +55,50 @@ export async function getMessageRecipients(messageId: number, establishmentId: n
   const offset = (safePage - 1) * safeLimit;
   const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM message_recipients mr JOIN messages m ON m.id = mr.message_id WHERE mr.message_id = ? AND m.establishment_id = ?', [messageId, establishmentId]);
   const total = Number(countRows[0]?.total || 0);
-  const [rows] = await pool.query<RowDataPacket[]>(`SELECT mr.id, mr.user_id, mr.delivery_status, mr.delivered_at, u.first_name, u.last_name, u.matricule, CASE WHEN mr2.id IS NULL THEN 0 ELSE 1 END AS is_read, CASE WHEN ma.id IS NULL THEN 0 ELSE 1 END AS is_acknowledged FROM message_recipients mr JOIN messages m ON m.id = mr.message_id JOIN users u ON u.id = mr.user_id LEFT JOIN message_reads mr2 ON mr2.message_id = mr.message_id AND mr2.user_id = mr.user_id LEFT JOIN message_acknowledgements ma ON ma.message_id = mr.message_id AND ma.user_id = mr.user_id WHERE mr.message_id = ? AND m.establishment_id = ? ORDER BY u.last_name, u.first_name LIMIT ? OFFSET ?`, [messageId, establishmentId, safeLimit, offset]);
-  return { data: rows, pagination: { page: safePage, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit) } };
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT
+       mr.id,
+       mr.user_id,
+       u.first_name,
+       u.last_name,
+       u.matricule,
+       c.name AS class_name,
+       mr.delivery_status,
+       mr.delivered_at,
+       mr2.read_at,
+       ma.acknowledged_at,
+       CASE
+         WHEN ma.id IS NOT NULL THEN 'acknowledged'
+         WHEN mr2.id IS NOT NULL THEN 'read'
+         WHEN mr.delivery_status = 'delivered' THEN 'delivered'
+         ELSE 'pending'
+       END AS status
+     FROM message_recipients mr
+     JOIN messages m ON m.id = mr.message_id
+     JOIN users u ON u.id = mr.user_id
+     LEFT JOIN students s ON s.user_id = u.id AND s.establishment_id = m.establishment_id
+     LEFT JOIN classes c ON c.id = s.class_id AND c.establishment_id = m.establishment_id
+     LEFT JOIN message_reads mr2 ON mr2.message_id = mr.message_id AND mr2.user_id = mr.user_id
+     LEFT JOIN message_acknowledgements ma ON ma.message_id = mr.message_id AND ma.user_id = mr.user_id
+     WHERE mr.message_id = ? AND m.establishment_id = ?
+     ORDER BY u.last_name, u.first_name
+     LIMIT ? OFFSET ?`,
+    [messageId, establishmentId, safeLimit, offset]
+  );
+  return {
+    data: rows.map((row) => ({
+      id: String(row.id),
+      user_id: String(row.user_id),
+      first_name: row.first_name,
+      last_name: row.last_name,
+      class_name: row.class_name,
+      status: row.status,
+      delivered_at: row.delivered_at,
+      read_at: row.read_at,
+      acknowledged_at: row.acknowledged_at,
+    })),
+    pagination: { page: safePage, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit) },
+  };
 }
 
 export async function getMessageRecipientStats(messageId: number, establishmentId: number): Promise<any> {
