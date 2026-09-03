@@ -47,7 +47,15 @@ export const messageService = {
   },
 
   async getMessageHistory(params: MessageParams = {}): Promise<PaginatedResponse<Message>> {
-    const { data } = await apiClient.get<PaginatedResponse<Message>>('/messages/history', { params });
+    const historyParams: Record<string, string | number> = {};
+    if (params.page !== undefined) historyParams.page = params.page;
+    if (params.limit !== undefined) historyParams.limit = params.limit;
+    if (params.priority) historyParams.priority = params.priority;
+    if (params.type) historyParams.type = params.type;
+    if (params.startDate) historyParams.date_from = params.startDate;
+    if (params.endDate) historyParams.date_to = params.endDate;
+    if (params.status) historyParams.status = params.status;
+    const { data } = await apiClient.get<PaginatedResponse<Message>>('/messages/history', { params: historyParams });
     return data;
   },
 

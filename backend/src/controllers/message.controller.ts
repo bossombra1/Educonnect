@@ -3,6 +3,7 @@ import * as messageService from '../services/message.service.js';
 import * as scheduledService from '../services/scheduled-message.service.js';
 import * as recipientService from '../services/message-recipient.service.js';
 import * as schedulingService from '../services/message-scheduling.service.js';
+import { getMessageHistoryWithType } from '../services/message-history-filter.service.js';
 import { RequestWithUser } from '../types/index.js';
 
 function values(value: unknown): string[] {
@@ -29,10 +30,7 @@ function sendMessageError(res: Response, err: unknown): void {
   const message = error?.message || 'Erreur lors du traitement du message.';
   const clientError = /destinataire|groupe|date de programmation|contenu du message/i.test(message);
   if (!clientError) console.error('[Messages] Erreur interne:', err);
-  res.status(clientError ? 400 : 500).json({
-    success: false,
-    error: clientError ? message : 'Une erreur interne est survenue lors du traitement du message.',
-  });
+  res.status(clientError ? 400 : 500).json({ success: false, error: clientError ? message : 'Une erreur interne est survenue lors du traitement du message.' });
 }
 
 export async function getMessages(req: Request, res: Response): Promise<void> {
@@ -65,29 +63,16 @@ export async function sendMessage(req: RequestWithUser, res: Response): Promise<
     const body = req.body as any;
     const content = String(body.content || '').trim();
     if (!content) { res.status(400).json({ success: false, error: 'Le contenu du message est requis.' }); return; }
-    const recipientIds = await recipientService.resolveRecipientIds(
-      user.establishmentId,
-      body.groupIds ?? body.group_ids,
-      body.classIds ?? body.class_ids,
-      body.roleIds ?? body.roles,
-      body.recipientIds ?? body.recipient_ids,
-      user.userId
-    );
+    const recipientIds = await recipientService.resolveRecipientIds(user.establishmentId, body.groupIds ?? body.group_ids, body.classIds ?? body.class_ids, body.roleIds ?? body.roles, body.recipientIds ?? body.recipient_ids, user.userId);
     const attachments = attachmentsFromRequest(req);
-    const result = await messageService.sendMessage({
-      group_ids: [], recipient_ids: recipientIds, title: body.title || undefined, content,
-      message_type: body.type || body.message_type || 'text', priority: body.priority || 'normal', link_url: body.linkUrl || body.link_url || undefined,
-    }, user.userId, user.establishmentId, recipientIds, attachments.length ? attachments : undefined);
+    const result = await messageService.sendMessage({ group_ids: [], recipient_ids: recipientIds, title: body.title || undefined, content, message_type: body.type || body.message_type || 'text', priority: body.priority || 'normal', link_url: body.linkUrl || body.link_url || undefined }, user.userId, user.establishmentId, recipientIds, attachments.length ? attachments : undefined);
     res.status(201).json({ success: true, data: result, message: 'Message envoyé avec succès.' });
   } catch (err) { sendMessageError(res, err); }
 }
 
 export async function scheduleMessage(req: Request, res: Response): Promise<void> {
   try {
-    const user = req.user as any;
-    const body = req.body as any;
-    const content = String(body.content || '').trim();
-    const scheduledFor = body.scheduledAt || body.scheduled_for;
+    const user = req.user as any; const body = req.body as any; const content = String(body.content || '').trim(); const scheduledFor = body.scheduledAt || body.scheduled_for;
     if (!content) { res.status(400).json({ success: false, error: 'Le contenu du message est requis.' }); return; }
     if (!scheduledFor) { res.status(400).json({ success: false, error: 'La date de programmation est requise.' }); return; }
     const scheduledDate = new Date(scheduledFor);
@@ -95,9 +80,7 @@ export async function scheduleMessage(req: Request, res: Response): Promise<void
     if (scheduledDate <= new Date()) { res.status(400).json({ success: false, error: 'La date de programmation doit être dans le futur.' }); return; }
     const recipientIds = await recipientService.resolveRecipientIds(user.establishmentId, body.groupIds ?? body.group_ids, body.classIds ?? body.class_ids, body.roleIds ?? body.roles, body.recipientIds ?? body.recipient_ids, user.userId);
     const attachments = attachmentsFromRequest(req);
-    const result = await schedulingService.createScheduledMessage({
-      title: body.title || undefined, content, message_type: body.type || body.message_type || 'text', priority: body.priority || 'normal', link_url: body.linkUrl || body.link_url || undefined,
-    }, user.userId, user.establishmentId, recipientIds, scheduledDate.toISOString(), attachments);
+    const result = await schedulingService.createScheduledMessage({ title: body.title || undefined, content, message_type: body.type || body.message_type || 'text', priority: body.priority || 'normal', link_url: body.linkUrl || body.link_url || undefined }, user.userId, user.establishmentId, recipientIds, scheduledDate.toISOString(), attachments);
     res.status(201).json({ success: true, data: result, message: 'Message programmé avec succès.' });
   } catch (err) { sendMessageError(res, err); }
 }
@@ -118,25 +101,13 @@ export async function getMessageStatistics(req: Request, res: Response): Promise
 }
 
 export async function getMessageRecipients(req: Request, res: Response): Promise<void> {
-  try {
-    const user = req.user as any;
-    const messageId = parseInt(req.params.id);
-    if (isNaN(messageId)) { res.status(400).json({ success: false, error: 'ID de message invalide.' }); return; }
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const result = await recipientService.getMessageRecipients(messageId, user.establishmentId, page, limit);
-    res.status(200).json({ success: true, data: result.data, pagination: result.pagination });
-  } catch (err) { res.status(500).json({ success: false, error: (err as Error).message }); }
+  try { const user = req.user as any; const messageId = parseInt(req.params.id); if (isNaN(messageId)) { res.status(400).json({ success: false, error: 'ID de message invalide.' }); return; } const page = parseInt(req.query.page as string) || 1; const limit = parseInt(req.query.limit as string) || 20; const result = await recipientService.getMessageRecipients(messageId, user.establishmentId, page, limit); res.status(200).json({ success: true, data: result.data, pagination: result.pagination }); }
+  catch (err) { res.status(500).json({ success: false, error: (err as Error).message }); }
 }
 
 export async function getMessageRecipientStats(req: Request, res: Response): Promise<void> {
-  try {
-    const user = req.user as any;
-    const messageId = parseInt(req.params.id);
-    if (isNaN(messageId)) { res.status(400).json({ success: false, error: 'ID de message invalide.' }); return; }
-    const stats = await recipientService.getMessageRecipientStats(messageId, user.establishmentId);
-    res.status(200).json({ success: true, data: stats });
-  } catch (err) { res.status(500).json({ success: false, error: (err as Error).message }); }
+  try { const user = req.user as any; const messageId = parseInt(req.params.id); if (isNaN(messageId)) { res.status(400).json({ success: false, error: 'ID de message invalide.' }); return; } const stats = await recipientService.getMessageRecipientStats(messageId, user.establishmentId); res.status(200).json({ success: true, data: stats }); }
+  catch (err) { res.status(500).json({ success: false, error: (err as Error).message }); }
 }
 
 export async function getMessageHistory(req: Request, res: Response): Promise<void> {
@@ -149,7 +120,11 @@ export async function getMessageHistory(req: Request, res: Response): Promise<vo
     const class_id = req.query.class_id ? parseInt(req.query.class_id as string) : undefined;
     const priority = req.query.priority as string | undefined;
     const status = req.query.status as string | undefined;
-    const result = await messageService.getMessageHistory(user.establishmentId, { date_from, date_to, class_id, priority, status }, { page, limit });
+    const type = req.query.type as string | undefined;
+    const filters = { date_from, date_to, class_id, priority, status, type };
+    const result = type
+      ? await getMessageHistoryWithType(user.establishmentId, filters, { page, limit })
+      : await messageService.getMessageHistory(user.establishmentId, filters, { page, limit });
     res.status(200).json({ success: true, data: result.data, pagination: { page: result.page, limit: result.limit, total: result.total, totalPages: result.totalPages } });
   } catch (err) { res.status(500).json({ success: false, error: (err as Error).message }); }
 }
