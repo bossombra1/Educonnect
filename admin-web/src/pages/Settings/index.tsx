@@ -11,7 +11,7 @@ interface EstablishmentSettings { id?: string | number; name: string; address: s
 
 function assetUrl(value: string | null | undefined): string | null {
   if (!value) return null;
-  if (/^https?:\\/\\//i.test(value)) return value;
+  if (/^https?:\/\//i.test(value)) return value;
   return value.startsWith('/') ? value : `/${value}`;
 }
 
