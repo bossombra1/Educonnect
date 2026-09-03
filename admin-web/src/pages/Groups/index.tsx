@@ -14,121 +14,26 @@ import type { Group, GroupType, Class } from '@/types';
 import toast from 'react-hot-toast';
 
 const typeOptions: { value: GroupType; label: string }[] = [
-  { value: 'class', label: 'Par classe' },
-  { value: 'level', label: 'Par niveau' },
-  { value: 'role', label: 'Par rôle' },
-  { value: 'custom', label: 'Personnalisé' },
-  { value: 'all_school', label: 'Toute l\'école' },
+  { value: 'class', label: 'Par classe' }, { value: 'level', label: 'Par niveau' }, { value: 'role', label: 'Par rôle' }, { value: 'custom', label: 'Personnalisé' }, { value: 'all_school', label: 'Toute l\'école' },
 ];
-
-const typeBadge: Record<GroupType, 'info' | 'success' | 'warning' | 'default' | 'danger'> = {
-  class: 'info', level: 'success', role: 'warning', custom: 'default', all_school: 'danger',
-};
-
-const typeLabels: Record<GroupType, string> = {
-  class: 'Classe', level: 'Niveau', role: 'Rôle', custom: 'Personnalisé', all_school: 'Toute l\'école',
-};
-
+const typeBadge: Record<GroupType, 'info' | 'success' | 'warning' | 'default' | 'danger'> = { class: 'info', level: 'success', role: 'warning', custom: 'default', all_school: 'danger' };
+const typeLabels: Record<GroupType, string> = { class: 'Classe', level: 'Niveau', role: 'Rôle', custom: 'Personnalisé', all_school: 'Toute l\'école' };
 const emptyForm = { name: '', type: 'class' as GroupType, description: '', classIds: [] as string[], level: '', role: '' };
 type FormData = typeof emptyForm;
 
+const filterString = (value: unknown): string => Array.isArray(value) ? String(value[0] ?? '') : value == null ? '' : String(value);
+
 export default function GroupsPage() {
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [classes, setClasses] = useState<Class[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<Group | null>(null);
-  const [form, setForm] = useState<FormData>(emptyForm);
-  const [formErrors, setFormErrors] = useState<Partial<Record<string, string>>>({});
-  const [deleteTarget, setDeleteTarget] = useState<Group | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const fetchData = async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const [groupsData, classesData] = await Promise.all([
-        groupService.getGroups(),
-        classService.getClasses(),
-      ]);
-      setGroups(groupsData);
-      setClasses(classesData);
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'Impossible de charger les groupes et les classes.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  const [groups, setGroups] = useState<Group[]>([]); const [classes, setClasses] = useState<Class[]>([]); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState<string | null>(null); const [modalOpen, setModalOpen] = useState(false); const [editing, setEditing] = useState<Group | null>(null); const [form, setForm] = useState<FormData>(emptyForm); const [formErrors, setFormErrors] = useState<Partial<Record<string, string>>>({}); const [deleteTarget, setDeleteTarget] = useState<Group | null>(null); const [deleting, setDeleting] = useState(false); const [saving, setSaving] = useState(false);
+  const fetchData = async () => { setLoading(true); setLoadError(null); try { const [groupsData, classesData] = await Promise.all([groupService.getGroups(), classService.getClasses()]); setGroups(groupsData); setClasses(classesData); } catch (error) { setLoadError(error instanceof Error ? error.message : 'Impossible de charger les groupes et les classes.'); } finally { setLoading(false); } };
   useEffect(() => { fetchData(); }, []);
-
   const openCreate = () => { setEditing(null); setForm(emptyForm); setFormErrors({}); setModalOpen(true); };
-  const openEdit = (g: Group) => {
-    setEditing(g);
-    setForm({ name: g.name, type: g.type, description: g.description || '', classIds: g.filters?.classIds || [], level: g.filters?.level || '', role: g.filters?.role || '' });
-    setFormErrors({});
-    setModalOpen(true);
-  };
-
-  const validate = (): boolean => {
-    const errors: typeof formErrors = {};
-    if (!form.name.trim()) errors.name = 'Le nom est requis';
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const getFilters = (): Record<string, string[]> => {
-    const filters: Record<string, string[]> = {};
-    if (form.type === 'class') filters.classIds = form.classIds;
-    if (form.type === 'level') filters.level = [form.level];
-    if (form.type === 'role') filters.role = [form.role];
-    return filters;
-  };
-
-  const getPreviewCount = (): string => {
-    switch (form.type) {
-      case 'class': return `${form.classIds.length} classe(s) sélectionnée(s)`;
-      case 'level': return form.level ? `Niveau ${form.level}` : 'Aucun niveau sélectionné';
-      case 'role': return form.role ? `Rôle ${form.role}` : 'Aucun rôle sélectionné';
-      case 'all_school': return 'Tous les utilisateurs';
-      default: return 'Personnalisé';
-    }
-  };
-
-  const handleSave = async () => {
-    if (!validate()) return;
-    setSaving(true);
-    try {
-      const data = { name: form.name, type: form.type, description: form.description || undefined, filters: getFilters() };
-      if (editing) {
-        await groupService.updateGroup(editing.id, data);
-        toast.success('Groupe modifié');
-      } else {
-        await groupService.createGroup(data);
-        toast.success('Groupe créé');
-      }
-      setModalOpen(false);
-      await fetchData();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Impossible d’enregistrer le groupe.');
-    } finally { setSaving(false); }
-  };
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      await groupService.deleteGroup(deleteTarget.id);
-      toast.success('Groupe supprimé');
-      setDeleteTarget(null);
-      await fetchData();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Impossible de supprimer le groupe.');
-    } finally { setDeleting(false); }
-  };
-
+  const openEdit = (g: Group) => { setEditing(g); setForm({ name: g.name, type: g.type, description: g.description || '', classIds: Array.isArray(g.filters?.classIds) ? g.filters.classIds.map(String) : [], level: filterString(g.filters?.level), role: filterString(g.filters?.role) }); setFormErrors({}); setModalOpen(true); };
+  const validate = (): boolean => { const errors: typeof formErrors = {}; if (!form.name.trim()) errors.name = 'Le nom est requis'; setFormErrors(errors); return Object.keys(errors).length === 0; };
+  const getFilters = (): Record<string, any> => { const filters: Record<string, any> = {}; if (form.type === 'class') filters.classIds = form.classIds; if (form.type === 'level' && form.level) filters.level = form.level; if (form.type === 'role' && form.role) filters.role = form.role; return filters; };
+  const getPreviewCount = (): string => { switch (form.type) { case 'class': return `${form.classIds.length} classe(s) sélectionnée(s)`; case 'level': return form.level ? `Niveau ${form.level}` : 'Aucun niveau sélectionné'; case 'role': return form.role ? `Rôle ${form.role}` : 'Aucun rôle sélectionné'; case 'all_school': return 'Tous les utilisateurs'; default: return 'Personnalisé'; } };
+  const handleSave = async () => { if (!validate()) return; setSaving(true); try { const data = { name: form.name, type: form.type, description: form.description || undefined, filters: getFilters() }; if (editing) { await groupService.updateGroup(editing.id, data); toast.success('Groupe modifié'); } else { await groupService.createGroup(data); toast.success('Groupe créé'); } setModalOpen(false); await fetchData(); } catch (error) { toast.error(error instanceof Error ? error.message : 'Impossible d’enregistrer le groupe.'); } finally { setSaving(false); } };
+  const handleDelete = async () => { if (!deleteTarget) return; setDeleting(true); try { await groupService.deleteGroup(deleteTarget.id); toast.success('Groupe supprimé'); setDeleteTarget(null); await fetchData(); } catch (error) { toast.error(error instanceof Error ? error.message : 'Impossible de supprimer le groupe.'); } finally { setDeleting(false); } };
   const columns: Column<Group>[] = [
     { key: 'name', header: 'Nom', render: (g) => <span className="font-medium text-slate-900">{g.name}</span> },
     { key: 'type', header: 'Type', render: (g) => <Badge variant={typeBadge[g.type]}>{typeLabels[g.type]}</Badge> },
@@ -136,15 +41,11 @@ export default function GroupsPage() {
     { key: 'description', header: 'Description', render: (g) => <span className="block max-w-[240px] truncate text-sm text-slate-500">{g.description || '—'}</span> },
     { key: 'actions', header: 'Actions', className: 'text-right', render: (g) => <div className="flex items-center justify-end gap-1"><button aria-label={`Modifier ${g.name}`} onClick={() => openEdit(g)} className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary focus-visible:text-primary"><Pencil className="h-4 w-4" /></button><button aria-label={`Supprimer ${g.name}`} onClick={() => setDeleteTarget(g)} className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:text-red-600"><Trash2 className="h-4 w-4" /></button></div> },
   ];
-
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-xl font-semibold tracking-tight text-slate-900">Groupes</h1><p className="mt-1 text-sm text-muted">Organisez les destinataires par classe, niveau, rôle ou groupe personnalisé.</p></div><Button onClick={openCreate}><Plus className="h-4 w-4" /> Nouveau groupe</Button></div>
-
       {loadError && <Card><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium text-red-800">Impossible de charger les données</p><p className="mt-1 text-sm text-red-700">{loadError}</p></div><Button variant="secondary" onClick={fetchData}><RotateCcw className="h-4 w-4" /> Réessayer</Button></div></Card>}
-
-      <Card className="!p-0 overflow-hidden"><Table columns={columns} data={groups as any} loading={loading} keyExtractor={(g) => g.id} emptyMessage={loadError ? 'Données indisponibles' : 'Aucun groupe trouvé'} /></Card>
-
+      <Card className="!p-0 overflow-hidden"><Table columns={columns} data={groups} loading={loading} keyExtractor={(g) => g.id} emptyMessage={loadError ? 'Données indisponibles' : 'Aucun groupe trouvé'} /></Card>
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Modifier le groupe' : 'Nouveau groupe'} size="lg">
         <div className="space-y-4">
           <Input label="Nom du groupe" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} error={formErrors.name} placeholder="Ex: Parents 6ème A" />
@@ -158,7 +59,6 @@ export default function GroupsPage() {
         </div>
         <div className="mt-6 flex justify-end gap-3"><Button variant="secondary" onClick={() => setModalOpen(false)}>Annuler</Button><Button onClick={handleSave} loading={saving}>{editing ? 'Enregistrer' : 'Créer le groupe'}</Button></div>
       </Modal>
-
       <ConfirmDialog open={!!deleteTarget} title="Supprimer le groupe" message={`Voulez-vous vraiment supprimer le groupe "${deleteTarget?.name}" ?`} onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} variant="danger" loading={deleting} />
     </div>
   );
