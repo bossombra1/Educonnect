@@ -1,6 +1,51 @@
 import { getPool } from '../config/database.js';
 import { RowDataPacket } from 'mysql2/promise';
 
+function normalizeIds(value: unknown): number[] {
+  const values = Array.isArray(value) ? value : value == null ? [] : [value];
+  return values.flatMap((item) => String(item).split(',')).map(Number).filter((id) => Number.isInteger(id) && id > 0);
+}
+
+function normalizeRoles(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : value == null ? [] : [value];
+  return values.flatMap((item) => String(item).split(',')).map((role) => role.trim().toUpperCase()).filter(Boolean);
+}
+
+export async function resolveRecipientIds(establishmentId: number, groupIds: unknown, classIds: unknown, roles: unknown, recipientIds: unknown, senderId: number): Promise<number[]> {
+  const pool = getPool();
+  const ids = new Set<number>(normalizeIds(recipientIds));
+  const groups = normalizeIds(groupIds);
+  const classes = normalizeIds(classIds);
+  const roleNames = normalizeRoles(roles);
+
+  if (groups.length) {
+    const placeholders = groups.map(() => '?').join(',');
+    const [rows] = await pool.query<RowDataPacket[]>(`SELECT DISTINCT gm.user_id FROM group_members gm JOIN groups g ON g.id = gm.group_id JOIN users u ON u.id = gm.user_id WHERE gm.group_id IN (${placeholders}) AND g.establishment_id = ? AND u.establishment_id = ?`, [...groups, establishmentId, establishmentId]);
+    const [validGroups] = await pool.query<RowDataPacket[]>(`SELECT id FROM groups WHERE id IN (${placeholders}) AND establishment_id = ?`, [...groups, establishmentId]);
+    if (validGroups.length !== groups.length) throw new Error('Un ou plusieurs groupes sont invalides pour cet établissement.');
+    rows.forEach((row) => ids.add(Number(row.user_id)));
+  }
+
+  if (classes.length) {
+    const placeholders = classes.map(() => '?').join(',');
+    const [rows] = await pool.query<RowDataPacket[]>(`SELECT s.user_id FROM students s JOIN users u ON u.id = s.user_id WHERE s.class_id IN (${placeholders}) AND s.establishment_id = ? AND u.establishment_id = ?`, [...classes, establishmentId, establishmentId]);
+    rows.forEach((row) => ids.add(Number(row.user_id)));
+  }
+
+  if (roleNames.length) {
+    const placeholders = roleNames.map(() => '?').join(',');
+    const [rows] = await pool.query<RowDataPacket[]>(`SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE u.establishment_id = ? AND UPPER(r.name) IN (${placeholders})`, [establishmentId, ...roleNames]);
+    rows.forEach((row) => ids.add(Number(row.id)));
+  }
+
+  const resolved = [...ids].filter((id) => id !== senderId);
+  if (!resolved.length) throw new Error('Aucun destinataire spécifié.');
+  const placeholders = resolved.map(() => '?').join(',');
+  const [validUsers] = await pool.query<RowDataPacket[]>(`SELECT id FROM users WHERE id IN (${placeholders}) AND establishment_id = ? AND is_active = 1`, [...resolved, establishmentId]);
+  if (validUsers.length !== resolved.length) throw new Error('Un ou plusieurs destinataires sont invalides pour cet établissement.');
+  return resolved;
+}
+
 export async function getMessageRecipients(messageId: number, establishmentId: number, page = 1, limit = 20): Promise<any> {
   const pool = getPool();
   const safePage = Math.max(1, page);
