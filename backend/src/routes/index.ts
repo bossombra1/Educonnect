@@ -9,9 +9,9 @@ import notificationRoutes from './notification.routes.js';
 import statisticsRoutes from './statistics.routes.js';
 import uploadRoutes from './upload.routes.js';
 import scheduledMessageRoutes from './scheduled-message.routes.js';
+import settingsRoutes from './settings.routes.js';
 
 const router = Router();
-
 router.use('/auth', authRoutes);
 router.use('/messages', messageRoutes);
 router.use('/users', userRoutes);
@@ -22,5 +22,5 @@ router.use('/notifications', notificationRoutes);
 router.use('/statistics', statisticsRoutes);
 router.use('/uploads', uploadRoutes);
 router.use('/scheduled-messages', scheduledMessageRoutes);
-
+router.use('/settings', settingsRoutes);
 export default router;
