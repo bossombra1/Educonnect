@@ -23,6 +23,12 @@ const priorityOptions: { value: MessagePriority; label: string }[] = [
 ];
 type RecipientTab = 'groups' | 'classes' | 'roles' | 'individuals';
 
+type ApiErrorLike = { response?: { data?: { error?: string; message?: string } } };
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  const apiError = error as ApiErrorLike;
+  return apiError.response?.data?.error || apiError.response?.data?.message || fallback;
+}
+
 export default function MessagesPage() {
   const navigate = useNavigate();
   const [title, setTitle] = useState(''); const [content, setContent] = useState('');
@@ -67,9 +73,9 @@ export default function MessagesPage() {
   };
   const validate = (): boolean => { const errs: Record<string, string> = {}; if (!content.trim()) errs.content = 'Le contenu du message est requis'; if (totalRecipients === 0) errs.recipients = 'Sélectionnez au moins un destinataire'; setErrors(errs); return Object.keys(errs).length === 0; };
 
-  const handleSend = async () => { if (!validate()) return; setSending(true); try { await messageService.sendMessage(buildFormData()); toast.success('Message envoyé avec succès'); navigate('/historique'); } catch (error) { console.error('Erreur envoi message:', error); toast.error('Impossible d’envoyer le message. Réessayez.'); } finally { setSending(false); } };
-  const handleSchedule = async () => { if (!validate()) return; if (!scheduleDate || !scheduleTime) { toast.error("Veuillez spécifier la date et l'heure"); return; } setScheduling(true); try { const fd = buildFormData(); fd.append('scheduledAt', new Date(`${scheduleDate}T${scheduleTime}`).toISOString()); await messageService.scheduleMessage(fd); toast.success('Message programmé'); navigate('/programmes'); } catch (error) { console.error('Erreur programmation message:', error); toast.error('Impossible de programmer le message. Réessayez.'); } finally { setScheduling(false); } };
-  const handleDraft = async () => { if (!content.trim()) { toast.error('Le contenu est requis pour un brouillon'); return; } try { const fd = buildFormData(); fd.append('status', 'draft'); await messageService.sendMessage(fd); toast.success('Brouillon enregistré'); navigate('/historique'); } catch (error) { console.error('Erreur enregistrement brouillon:', error); toast.error('Impossible d’enregistrer le brouillon. Réessayez.'); } };
+  const handleSend = async () => { if (!validate()) return; setSending(true); try { await messageService.sendMessage(buildFormData()); toast.success('Message envoyé avec succès'); navigate('/historique'); } catch (error) { console.error('Erreur envoi message:', error); toast.error(getApiErrorMessage(error, 'Impossible d’envoyer le message. Réessayez.')); } finally { setSending(false); } };
+  const handleSchedule = async () => { if (!validate()) return; if (!scheduleDate || !scheduleTime) { toast.error("Veuillez spécifier la date et l'heure"); return; } setScheduling(true); try { const fd = buildFormData(); fd.append('scheduledAt', new Date(`${scheduleDate}T${scheduleTime}`).toISOString()); await messageService.scheduleMessage(fd); toast.success('Message programmé'); navigate('/programmes'); } catch (error) { console.error('Erreur programmation message:', error); toast.error(getApiErrorMessage(error, 'Impossible de programmer le message. Réessayez.')); } finally { setScheduling(false); } };
+  const handleDraft = async () => { if (!content.trim()) { toast.error('Le contenu est requis pour un brouillon'); return; } try { const fd = buildFormData(); fd.append('status', 'draft'); await messageService.sendMessage(fd); toast.success('Brouillon enregistré'); navigate('/historique'); } catch (error) { console.error('Erreur enregistrement brouillon:', error); toast.error(getApiErrorMessage(error, 'Impossible d’enregistrer le brouillon. Réessayez.')); } };
 
   const roleOptions = [
     { value: 'STUDENT' as UserRole, label: 'Élèves' }, { value: 'PARENT' as UserRole, label: 'Parents' }, { value: 'TEACHER' as UserRole, label: 'Enseignants' }, { value: 'STAFF' as UserRole, label: 'Personnel' },
