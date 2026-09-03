@@ -3,7 +3,6 @@
 // =============================================================
 
 import type { Request } from 'express';
-import type { File as MulterFile } from 'multer';
 
 export interface Role { id: number; name: string; label: string; description: string | null; level: number; created_at: Date; }
 export interface User { id: number; establishment_id: number | null; role_id: number; matricule: string; first_name: string; last_name: string; phone: string | null; phone_hash: string | null; email: string | null; password_hash: string; avatar_url: string | null; fcm_token: string | null; device_type: DeviceType | null; otp_code: string | null; otp_expires_at: Date | null; otp_verified: boolean; last_login_at: Date | null; is_active: number; created_at: Date; updated_at: Date; }
@@ -50,15 +49,28 @@ export interface PaginationResult { data: any[]; total: number; page: number; li
 export interface ValidationRule { type?: string; required?: boolean; minLength?: number; maxLength?: number; min?: number; max?: number; pattern?: RegExp; custom?: (value: any) => string | null; }
 export interface ValidationSchema { [key: string]: ValidationRule; }
 
-// All protected controllers receive Express.Request. Authentication is represented by the global declaration below.
+export interface UploadedFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  destination: string;
+  filename: string;
+  path: string;
+  buffer: Buffer;
+  stream: NodeJS.ReadableStream;
+}
+
+// Protected controllers receive Express.Request. Authentication is represented by the global declaration below.
 export type RequestWithUser = Request;
 
 declare global {
   namespace Express {
     interface Request {
       user: JwtPayload & { email: string };
-      file?: MulterFile;
-      files?: MulterFile[];
+      file?: UploadedFile;
+      files?: UploadedFile[];
     }
     interface Response {
       success: (data?: any, message?: string, statusCode?: number, pagination?: any) => this;
