@@ -126,20 +126,33 @@ export default function StudentsPage() {
   };
 
   const columns: Column<User>[] = [
-    { key: 'name', header: 'Nom complet', render: (u) => <span className="font-medium text-gray-900">{u.firstName} {u.lastName}</span> },
-    { key: 'matricule', header: 'Matricule', render: (u) => <span className="text-sm text-gray-600">{u.matricule || '—'}</span> },
-    { key: 'email', header: 'E-mail', render: (u) => <span className="text-sm text-gray-600">{u.email || '—'}</span> },
-    { key: 'class', header: 'Classe', render: (u) => <span className="text-sm text-gray-600">{u.className || '—'}</span> },
-    { key: 'phone', header: 'Téléphone', render: (u) => formatPhone(u.phone) },
-    { key: 'isActive', header: 'Statut', render: (u) => u.isActive ? <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Actif</span> : <span className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Inactif</span> },
-    { key: 'actions', header: 'Actions', className: 'text-right', render: (u) => <div className="flex items-center justify-end gap-1"><button aria-label={`Modifier ${u.firstName} ${u.lastName}`} onClick={() => openEdit(u)} className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-primary"><Pencil className="h-4 w-4" /></button><button aria-label={`Désactiver ${u.firstName} ${u.lastName}`} onClick={() => setDeleteTarget(u)} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div> },
+    { key: 'name', header: 'Nom complet', render: (u) => <span className="font-medium text-slate-900">{u.firstName} {u.lastName}</span> },
+    { key: 'matricule', header: 'Matricule', render: (u) => <span className="text-sm text-slate-600">{u.matricule || '—'}</span> },
+    { key: 'email', header: 'E-mail', render: (u) => <span className="text-sm text-slate-600">{u.email || '—'}</span> },
+    { key: 'class', header: 'Classe', render: (u) => <span className="text-sm text-slate-600">{u.className || '—'}</span> },
+    { key: 'phone', header: 'Téléphone', render: (u) => <span className="text-sm text-slate-600">{formatPhone(u.phone)}</span> },
+    { key: 'isActive', header: 'Statut', render: (u) => u.isActive ? <span className="inline-flex rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Actif</span> : <span className="inline-flex rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700">Inactif</span> },
+    { key: 'actions', header: 'Actions', className: 'text-right', render: (u) => <div className="flex items-center justify-end gap-1"><button aria-label={`Modifier ${u.firstName} ${u.lastName}`} onClick={() => openEdit(u)} className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary focus-visible:text-primary"><Pencil className="h-4 w-4" /></button><button aria-label={`Désactiver ${u.firstName} ${u.lastName}`} onClick={() => setDeleteTarget(u)} className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:text-red-600"><Trash2 className="h-4 w-4" /></button></div> },
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {loadError && <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><span>{loadError}</span><Button variant="secondary" onClick={fetchStudents}>Réessayer</Button></div>}
       {classesError && <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><span>{classesError}</span><Button variant="secondary" onClick={fetchClasses}>Réessayer les classes</Button></div>}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center"><div className="w-full sm:max-w-xs"><SearchBar onSearch={(value) => { setSearch(value); setPagination((p) => ({ ...p, page: 1 })); }} placeholder="Rechercher un élève..." /></div><div className="w-full sm:w-48"><select value={classFilter} onChange={(e) => { setClassFilter(e.target.value); setPagination((p) => ({ ...p, page: 1 })); }} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-blue-500"><option value="">Toutes les classes</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div></div><div className="flex gap-2"><Button variant="secondary" onClick={() => { setImportFile(null); setImportResult(null); setImportModalOpen(true); }}><Upload className="h-4 w-4" /> Importer Excel</Button><Button onClick={openCreate}><Plus className="h-4 w-4" /> Ajouter un élève</Button></div></div>
+      <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">Élèves</h1>
+          <p className="mt-1 text-sm text-muted">Gérez les élèves, leurs classes et leurs informations de contact.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => { setImportFile(null); setImportResult(null); setImportModalOpen(true); }}><Upload className="h-4 w-4" /> Importer Excel</Button>
+          <Button onClick={openCreate}><Plus className="h-4 w-4" /> Ajouter un élève</Button>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="w-full sm:max-w-sm"><SearchBar onSearch={(value) => { setSearch(value); setPagination((p) => ({ ...p, page: 1 })); }} placeholder="Rechercher un élève..." /></div>
+        <div className="w-full sm:w-52"><select aria-label="Filtrer par classe" value={classFilter} onChange={(e) => { setClassFilter(e.target.value); setPagination((p) => ({ ...p, page: 1 })); }} className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"><option value="">Toutes les classes</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+      </div>
       <Card className="!p-0 overflow-hidden"><Table columns={columns} data={students as any} loading={loading} keyExtractor={(u) => u.id} emptyMessage="Aucun élève trouvé" /></Card>
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingUser ? 'Modifier l\'élève' : 'Ajouter un élève'} size="lg">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -153,7 +166,7 @@ export default function StudentsPage() {
         </div>
         <div className="mt-6 flex justify-end gap-3"><Button variant="secondary" onClick={() => setModalOpen(false)}>Annuler</Button><Button onClick={handleSave} loading={saving}>{editingUser ? 'Enregistrer' : 'Créer'}</Button></div>
       </Modal>
-      <Modal open={importModalOpen} onClose={() => setImportModalOpen(false)} title="Importer des élèves" size="md"><div className="space-y-4"><p className="text-sm text-gray-600">Importez un fichier Excel (.xlsx) contenant la liste des élèves. Les colonnes attendues : Prénom, Nom, Email, Téléphone, Matricule.</p><input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20" />{importResult && <div className="rounded-lg bg-gray-50 p-4"><p className="text-sm font-medium text-gray-700">Résultat : {importResult.success} réussis, {importResult.failed} échoués sur {importResult.total}</p>{importResult.errors.length > 0 && <ul className="mt-2 max-h-32 overflow-y-auto text-xs text-red-600">{importResult.errors.map((err, i) => <li key={i}>Ligne {err.row} : {err.message}</li>)}</ul>}</div>}<div className="flex justify-end gap-3"><Button variant="secondary" onClick={() => setImportModalOpen(false)}>Fermer</Button><Button onClick={handleImport} loading={importing} disabled={!importFile}>Importer</Button></div></div></Modal>
+      <Modal open={importModalOpen} onClose={() => setImportModalOpen(false)} title="Importer des élèves" size="md"><div className="space-y-4"><p className="text-sm text-slate-600">Importez un fichier Excel (.xlsx) contenant la liste des élèves. Les colonnes attendues : Prénom, Nom, Email, Téléphone, Matricule.</p><input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-md file:border-0 file:bg-primary-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary hover:file:bg-primary-100" />{importResult && <div className="rounded-md border border-line bg-surface p-4"><p className="text-sm font-medium text-slate-700">Résultat : {importResult.success} réussis, {importResult.failed} échoués sur {importResult.total}</p>{importResult.errors.length > 0 && <ul className="mt-2 max-h-32 overflow-y-auto text-xs text-red-600">{importResult.errors.map((err, i) => <li key={i}>Ligne {err.row} : {err.message}</li>)}</ul>}</div>}<div className="flex justify-end gap-3"><Button variant="secondary" onClick={() => setImportModalOpen(false)}>Fermer</Button><Button onClick={handleImport} loading={importing} disabled={!importFile}>Importer</Button></div></div></Modal>
       <ConfirmDialog open={!!deleteTarget} title="Désactiver l'élève" message={`Voulez-vous vraiment désactiver ${deleteTarget?.firstName} ${deleteTarget?.lastName} ?`} onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} variant="danger" loading={deleting} />
     </div>
   );
