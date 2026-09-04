@@ -9,7 +9,11 @@ interface ExcelRow {
   'Prénom': string;
   'Matricule': string;
   'Classe': string;
+  'E-mail élève': string;
+  'Téléphone élève': string;
+  'Nom complet Parent 1': string;
   'Tél Parent 1': string;
+  'Nom complet Parent 2': string;
   'Tél Parent 2': string;
 }
 
@@ -36,17 +40,24 @@ function findHeaderRow(sheet: XLSX.WorkSheet): number {
   return headerIndex;
 }
 
+function splitFullName(fullName: string): { firstName: string; lastName: string } {
+  const normalized = fullName.trim().replace(/\s+/g, ' ');
+  if (!normalized) return { firstName: '', lastName: '' };
+  const [firstName, ...rest] = normalized.split(' ');
+  return { firstName, lastName: rest.join(' ') || firstName };
+}
+
 /**
  * Génère le modèle Excel officiel utilisé par l'import des élèves.
- * Les 4 premières colonnes sont obligatoires. Les deux téléphones parentaux sont facultatifs.
+ * Les 4 premières colonnes sont obligatoires. Les coordonnées des élèves et parents sont facultatives.
  */
 export function generateStudentsImportTemplate(): Buffer {
   const workbook = XLSX.utils.book_new();
 
   const sheet = XLSX.utils.aoa_to_sheet([
     ['Modèle officiel — Import des élèves'],
-    ['Nom', 'Prénom', 'Matricule', 'Classe', 'Tél Parent 1', 'Tél Parent 2'],
-    ['YAPO', 'Jean', 'EXEMPLE', '3ème C', '0700000000', '0500000000'],
+    ['Nom', 'Prénom', 'Matricule', 'Classe', 'E-mail élève', 'Téléphone élève', 'Nom complet Parent 1', 'Tél Parent 1', 'Nom complet Parent 2', 'Tél Parent 2'],
+    ['YAPO', 'Jean', 'EXEMPLE', '3ème C', 'jean.yapo@gmail.com', '0748123456', 'Marie YAPO', '0708123456', 'Jean-Pierre YAPO', '0509123456'],
   ]);
 
   sheet['!cols'] = [
@@ -54,28 +65,35 @@ export function generateStudentsImportTemplate(): Buffer {
     { wch: 24 },
     { wch: 20 },
     { wch: 18 },
+    { wch: 30 },
+    { wch: 22 },
+    { wch: 30 },
     { wch: 20 },
+    { wch: 30 },
     { wch: 20 },
   ];
   sheet['!freeze'] = { xSplit: 0, ySplit: 2 };
-  sheet['!autofilter'] = { ref: 'A2:F3' };
+  sheet['!autofilter'] = { ref: 'A2:J3' };
 
-  // Commentaires explicites sur les colonnes obligatoires.
   for (const address of ['A2', 'B2', 'C2', 'D2']) {
     sheet[address].c = [{ a: 'EduConnect', t: 'Champ obligatoire' }];
   }
   for (const address of ['E2', 'F2']) {
-    sheet[address].c = [{ a: 'EduConnect', t: 'Champ facultatif — téléphone du parent' }];
+    sheet[address].c = [{ a: 'EduConnect', t: 'Champ facultatif — coordonnées de l’élève' }];
+  }
+  for (const address of ['G2', 'H2', 'I2', 'J2']) {
+    sheet[address].c = [{ a: 'EduConnect', t: 'Champ facultatif — coordonnées du parent' }];
   }
 
   const instructions = XLSX.utils.aoa_to_sheet([
     ['Instructions d’utilisation'],
     ['Colonnes obligatoires', 'Nom, Prénom, Matricule, Classe'],
-    ['Colonnes facultatives', 'Tél Parent 1, Tél Parent 2'],
+    ['Colonnes facultatives', 'E-mail élève, Téléphone élève, Nom complet Parent 1, Tél Parent 1, Nom complet Parent 2, Tél Parent 2'],
     ['Ligne d’exemple', 'La ligne contenant le matricule EXEMPLE est ignorée automatiquement par EduConnect.'],
+    ['Parents', 'Si un nom complet parent est fourni, il est enregistré comme nom réel du parent. Les téléphones Parent 1 et Parent 2 restent séparés.'],
     ['Format', 'Conservez les noms exacts des colonnes et renseignez une ligne par élève.'],
   ]);
-  instructions['!cols'] = [{ wch: 28 }, { wch: 95 }];
+  instructions['!cols'] = [{ wch: 28 }, { wch: 110 }];
 
   XLSX.utils.book_append_sheet(workbook, sheet, 'Élèves');
   XLSX.utils.book_append_sheet(workbook, instructions, 'Instructions');
@@ -106,7 +124,6 @@ export async function importStudentsFromExcel(fileBuffer: Buffer, establishmentI
   const headerRow = findHeaderRow(sheet);
   const rows = XLSX.utils.sheet_to_json<ExcelRow>(sheet, { range: headerRow, defval: '' });
 
-  // Le modèle officiel contient une ligne d'exemple volontairement ignorée.
   const importRows = rows.filter((row) => String(row.Matricule || '').trim().toUpperCase() !== TEMPLATE_EXAMPLE_MATRICULE);
   result.totalRows = importRows.length;
 
@@ -177,6 +194,10 @@ export async function importStudentsFromExcel(fileBuffer: Buffer, establishmentI
       const firstName = String(row['Prénom'] || '').trim();
       const matricule = String(row['Matricule'] || '').trim();
       const className = String(row['Classe'] || '').trim();
+      const studentEmail = String(row['E-mail élève'] || '').trim();
+      const studentPhone = String(row['Téléphone élève'] || '').trim();
+      const parent1FullName = String(row['Nom complet Parent 1'] || '').trim();
+      const parent2FullName = String(row['Nom complet Parent 2'] || '').trim();
       const telParent1 = String(row['Tél Parent 1'] || '').trim();
       const telParent2 = String(row['Tél Parent 2'] || '').trim();
 
@@ -208,8 +229,8 @@ export async function importStudentsFromExcel(fileBuffer: Buffer, establishmentI
 
         const studentPassword = await bcrypt.hash(matricule, 10);
         const [studentUser] = await conn.query<ResultSetHeader>(
-          'INSERT INTO users (establishment_id, role_id, matricule, first_name, last_name, phone, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
-          [establishmentId, studentRoleId, matricule, firstName, lastName, null, studentPassword]
+          'INSERT INTO users (establishment_id, role_id, matricule, first_name, last_name, email, phone, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)',
+          [establishmentId, studentRoleId, matricule, firstName, lastName, studentEmail || null, studentPhone || null, studentPassword]
         );
         const [studentResult] = await conn.query<ResultSetHeader>(
           "INSERT INTO students (user_id, class_id, establishment_id, matricule_scolaire, admission_date, status) VALUES (?, ?, ?, ?, '2025-09-01', 'active')",
@@ -217,11 +238,14 @@ export async function importStudentsFromExcel(fileBuffer: Buffer, establishmentI
         );
         const studentId = studentResult.insertId;
 
-        if ((telParent1 || telParent2) && parentRoleId) {
+        if ((parent1FullName || telParent1 || parent2FullName || telParent2) && parentRoleId) {
+          const parent1Name = splitFullName(parent1FullName);
+          const effectiveParent1FirstName = parent1Name.firstName || 'Parent';
+          const effectiveParent1LastName = parent1Name.lastName || lastName;
           const parentPassword = await bcrypt.hash(`P-${matricule}`, 10);
           const [parentUser] = await conn.query<ResultSetHeader>(
             'INSERT INTO users (establishment_id, role_id, matricule, first_name, last_name, phone, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
-            [establishmentId, parentRoleId, `P-${matricule}`, 'Parent', lastName, telParent1 || null, parentPassword]
+            [establishmentId, parentRoleId, `P-${matricule}`, effectiveParent1FirstName, effectiveParent1LastName, telParent1 || null, parentPassword]
           );
           const [parent] = await conn.query<ResultSetHeader>(
             'INSERT INTO parents (user_id, establishment_id, profession, is_primary_contact) VALUES (?, ?, ?, ?)',
@@ -232,11 +256,14 @@ export async function importStudentsFromExcel(fileBuffer: Buffer, establishmentI
             [parent.insertId, studentId]
           );
 
-          if (telParent2 && telParent2 !== telParent1) {
+          if (telParent2 || parent2FullName) {
+            const parent2Name = splitFullName(parent2FullName);
+            const effectiveParent2FirstName = parent2Name.firstName || 'Parent';
+            const effectiveParent2LastName = parent2Name.lastName || lastName;
             const parent2Password = await bcrypt.hash(`P2-${matricule}`, 10);
             const [parent2User] = await conn.query<ResultSetHeader>(
               'INSERT INTO users (establishment_id, role_id, matricule, first_name, last_name, phone, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
-              [establishmentId, parentRoleId, `P2-${matricule}`, 'Parent', lastName, telParent2, parent2Password]
+              [establishmentId, parentRoleId, `P2-${matricule}`, effectiveParent2FirstName, effectiveParent2LastName, telParent2 || null, parent2Password]
             );
             const [parent2] = await conn.query<ResultSetHeader>(
               'INSERT INTO parents (user_id, establishment_id, profession, is_primary_contact) VALUES (?, ?, ?, ?)',
