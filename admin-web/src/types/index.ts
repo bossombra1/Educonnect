@@ -27,3 +27,12 @@ export interface LoginResponse { user: User; token: string; }
 export interface CreateMessageForm { title?: string; content: string; type: MessageType; priority: MessagePriority; recipientIds?: string[]; groupIds?: string[]; classIds?: string[]; roleIds?: UserRole[]; scheduledAt?: string; attachments?: File[]; }
 export interface ImportResult { totalRows: number; successCount: number; failCount: number; errors: { row: number; message: string }[]; }
 export interface CreateGroupForm { name: string; type: GroupType; description?: string; filters?: Record<string, string[]>; }
+export interface Notification {
+  id: number;
+  title: string;
+  message: string;
+  type?: string;
+  isRead?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
