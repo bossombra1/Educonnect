@@ -8,6 +8,7 @@ const router = Router();
 
 router.get('/', authenticate, messageController.getMessages);
 router.get('/history', authenticate, requireAdmin(), messageController.getMessageHistory);
+router.get('/history/:id', authenticate, requireAdmin(), messageController.getMessageHistoryDetail);
 router.get('/unread-count', authenticate, requireMobileUser(), messageController.getUnreadCount);
 router.get('/:id/recipients', authenticate, requireAdmin(), messageController.getMessageRecipients);
 router.get('/:id/recipient-stats', authenticate, requireAdmin(), messageController.getMessageRecipientStats);
