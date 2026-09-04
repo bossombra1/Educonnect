@@ -35,10 +35,10 @@ async function resolveGroupMembersQuery(conn: PoolConnection, groupType: string,
   if (filters) { try { filterData = JSON.parse(filters); } catch { filterData = {}; } }
   switch (groupType) {
     case 'all_school':
-      query = `SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE u.establishment_id = ? AND u.is_active = 1 AND r.name IN ('PARENT', 'STUDENT', 'STAFF')`;
+      query = `SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE u.establishment_id = ? AND u.is_active = 1 AND r.name IN ('PARENT', 'STUDENT', 'STAFF', 'TEACHER')`;
       break;
     case 'role': {
-      const roleName = filterData.role_name || 'PARENT';
+      const roleName = filterData.role_name || filterData.role || 'PARENT';
       query = `SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE u.establishment_id = ? AND u.is_active = 1 AND r.name = ?`;
       params.push(roleName); break;
     }
@@ -50,9 +50,14 @@ async function resolveGroupMembersQuery(conn: PoolConnection, groupType: string,
       if (level) params.push(level); break;
     }
     case 'class': {
-      if (filterData.class_id) {
+      const classIds = Array.isArray(filterData.classIds) ? filterData.classIds.map(Number).filter((id: number) => Number.isInteger(id) && id > 0) : [];
+      if (classIds.length > 0) {
+        const placeholders = classIds.map(() => '?').join(',');
+        query = `SELECT DISTINCT s.user_id as id FROM students s JOIN classes c ON c.id = s.class_id WHERE c.id IN (${placeholders}) AND c.establishment_id = ? AND s.establishment_id = c.establishment_id AND s.status = 'active'`;
+        params.splice(0, params.length, ...classIds, establishmentId);
+      } else if (filterData.class_id) {
         query = `SELECT s.user_id as id FROM students s JOIN classes c ON c.id = s.class_id WHERE c.id = ? AND c.establishment_id = ? AND s.establishment_id = c.establishment_id AND s.status = 'active'`;
-        params.unshift(filterData.class_id);
+        params.unshift(Number(filterData.class_id));
       } else if (filterData.class_name) {
         query = `SELECT s.user_id as id FROM students s JOIN classes c ON c.id = s.class_id WHERE c.name = ? AND c.establishment_id = ? AND s.establishment_id = c.establishment_id AND s.status = 'active'`;
         params.unshift(filterData.class_name);
