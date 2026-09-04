@@ -35,7 +35,9 @@ async function resolveGroupMembersQuery(conn: PoolConnection, groupType: string,
   if (filters) { try { filterData = JSON.parse(filters); } catch { filterData = {}; } }
   switch (groupType) {
     case 'all_school':
-      query = `SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE u.establishment_id = ? AND u.is_active = 1 AND r.name IN ('PARENT', 'STUDENT', 'STAFF', 'TEACHER')`;
+      // Un groupe « Toute l’école » doit toujours être calculé sur l’ensemble des utilisateurs actifs de l’établissement.
+      // Il ne doit pas dépendre d’une liste paginée chargée par le frontend et ne doit donc jamais être limité à 10/50/etc.
+      query = `SELECT DISTINCT u.id FROM users u WHERE u.establishment_id = ? AND u.is_active = 1`;
       break;
     case 'role': {
       const roleName = filterData.role_name || filterData.role || 'PARENT';
@@ -113,8 +115,12 @@ export async function updateGroup(groupId: number, data: Partial<CreateGroupInpu
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [groupRows] = await conn.query<RowDataPacket[]>('SELECT establishment_id FROM `groups` WHERE id = ? AND establishment_id = ?', [groupId, establishmentId]);
+    const [groupRows] = await conn.query<RowDataPacket[]>('SELECT establishment_id, group_type, filters FROM `groups` WHERE id = ? AND establishment_id = ?', [groupId, establishmentId]);
     if (groupRows.length === 0) return null;
+    const existingGroup = groupRows[0];
+    const nextGroupType = data.group_type !== undefined ? data.group_type : existingGroup.group_type;
+    const nextFiltersJson = data.filters !== undefined ? (data.filters ? JSON.stringify(data.filters) : null) : existingGroup.filters;
+
     if (data.user_ids !== undefined) {
       const requestedUserIds = [...new Set(data.user_ids)];
       if (requestedUserIds.length > 0) {
@@ -127,9 +133,16 @@ export async function updateGroup(groupId: number, data: Partial<CreateGroupInpu
     if (data.name !== undefined) { fields.push('name = ?'); params.push(data.name); }
     if (data.group_type !== undefined) { fields.push('group_type = ?'); params.push(data.group_type); }
     if (data.description !== undefined) { fields.push('description = ?'); params.push(data.description); }
-    if (data.filters !== undefined) { fields.push('filters = ?'); params.push(data.filters ? JSON.stringify(data.filters) : null); }
+    if (data.filters !== undefined) { fields.push('filters = ?'); params.push(nextFiltersJson); }
     if (fields.length > 0) { params.push(groupId, establishmentId); await conn.query(`UPDATE \`groups\` SET ${fields.join(', ')} WHERE id = ? AND establishment_id = ?`, params); }
-    if (data.user_ids !== undefined) {
+
+    // Les groupes dynamiques sont recalculés depuis la BD. Ainsi « Toute l’école »
+    // récupère également les nouveaux utilisateurs et les utilisateurs au-delà de toute pagination frontend.
+    if (nextGroupType !== 'custom') {
+      await conn.query('DELETE FROM group_members WHERE group_id = ?', [groupId]);
+      const resolvedIds = await resolveGroupMembersQuery(conn, nextGroupType, nextFiltersJson, establishmentId);
+      if (resolvedIds.length > 0) await conn.query('INSERT INTO group_members (group_id, user_id) VALUES ?', [resolvedIds.map((userId) => [groupId, userId])]);
+    } else if (data.user_ids !== undefined) {
       await conn.query('DELETE FROM group_members WHERE group_id = ?', [groupId]);
       const ids = [...new Set(data.user_ids)];
       if (ids.length > 0) await conn.query('INSERT INTO group_members (group_id, user_id) VALUES ?', [ids.map((userId) => [groupId, userId])]);
