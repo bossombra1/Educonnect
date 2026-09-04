@@ -9,9 +9,23 @@ import ApiErrorBanner from '@/components/ui/ApiErrorBanner';
 interface NavItem { to: string; label: string; icon: React.ReactNode; }
 interface EstablishmentBranding { name: string; logo_url: string | null; }
 const navItems: NavItem[] = [
-  { to: '/dashboard', label: 'Tableau de bord', icon: <LayoutDashboard className="h-[18px] w-[18px]" /> }, { to: '/eleves', label: 'Élèves', icon: <GraduationCap className="h-[18px] w-[18px]" /> }, { to: '/parents', label: 'Parents', icon: <Users className="h-[18px] w-[18px]" /> }, { to: '/personnel', label: 'Personnel', icon: <Briefcase className="h-[18px] w-[18px]" /> }, { to: '/classes', label: 'Classes', icon: <BookOpen className="h-[18px] w-[18px]" /> }, { to: '/groupes', label: 'Groupes', icon: <UsersRound className="h-[18px] w-[18px]" /> }, { to: '/messages', label: 'Messages', icon: <Send className="h-[18px] w-[18px]" /> }, { to: '/programmes', label: 'Programmés', icon: <Clock className="h-[18px] w-[18px]" /> }, { to: '/historique', label: 'Historique', icon: <Archive className="h-[18px] w-[18px]" /> }, { to: '/statistiques', label: 'Statistiques', icon: <BarChart3 className="h-[18px] w-[18px]" /> }, { to: '/import', label: 'Import Excel', icon: <Upload className="h-[18px] w-[18px]" /> }, { to: '/notifications', label: 'Notifications', icon: <BellRing className="h-[18px] w-[18px]" /> }, { to: '/accuses', label: 'Accusés', icon: <CheckSquare className="h-[18px] w-[18px]" /> }, { to: '/parametres', label: 'Paramètres', icon: <Settings className="h-[18px] w-[18px]" /> },
+  { to: '/dashboard', label: 'Tableau de bord', icon: <LayoutDashboard className="h-[18px] w-[18px]" /> },
+  { to: '/eleves', label: 'Élèves', icon: <GraduationCap className="h-[18px] w-[18px]" /> },
+  { to: '/parents', label: 'Parents', icon: <Users className="h-[18px] w-[18px]" /> },
+  { to: '/personnel', label: 'Personnel', icon: <Briefcase className="h-[18px] w-[18px]" /> },
+  { to: '/utilisateurs', label: 'Utilisateurs', icon: <User className="h-[18px] w-[18px]" /> },
+  { to: '/classes', label: 'Classes', icon: <BookOpen className="h-[18px] w-[18px]" /> },
+  { to: '/groupes', label: 'Groupes', icon: <UsersRound className="h-[18px] w-[18px]" /> },
+  { to: '/messages', label: 'Messages', icon: <Send className="h-[18px] w-[18px]" /> },
+  { to: '/programmes', label: 'Programmés', icon: <Clock className="h-[18px] w-[18px]" /> },
+  { to: '/historique', label: 'Historique', icon: <Archive className="h-[18px] w-[18px]" /> },
+  { to: '/statistiques', label: 'Statistiques', icon: <BarChart3 className="h-[18px] w-[18px]" /> },
+  { to: '/import', label: 'Import Excel', icon: <Upload className="h-[18px] w-[18px]" /> },
+  { to: '/notifications', label: 'Notifications', icon: <BellRing className="h-[18px] w-[18px]" /> },
+  { to: '/accuses', label: 'Accusés de réception', icon: <CheckSquare className="h-[18px] w-[18px]" /> },
+  { to: '/parametres', label: 'Paramètres', icon: <Settings className="h-[18px] w-[18px]" /> },
 ];
-const pageTitles: Record<string, string> = { '/dashboard': 'Tableau de bord', '/eleves': 'Gestion des élèves', '/parents': 'Gestion des parents', '/personnel': 'Gestion du personnel', '/classes': 'Gestion des classes', '/groupes': 'Gestion des groupes', '/messages': 'Nouveau message', '/programmes': 'Messages programmés', '/historique': 'Historique des messages', '/statistiques': 'Statistiques', '/import': 'Import Excel', '/notifications': 'Gestion des notifications', '/accuses': 'Suivi des accusés', '/parametres': 'Paramètres' };
+const pageTitles: Record<string, string> = { '/dashboard': 'Tableau de bord', '/eleves': 'Gestion des élèves', '/parents': 'Gestion des parents', '/personnel': 'Gestion du personnel', '/utilisateurs': 'Gestion des utilisateurs', '/classes': 'Gestion des classes', '/groupes': 'Gestion des groupes', '/messages': 'Nouveau message', '/programmes': 'Messages programmés', '/historique': 'Historique des messages', '/statistiques': 'Statistiques', '/import': 'Import Excel', '/notifications': 'Gestion des notifications', '/accuses': 'Suivi des accusés de réception', '/parametres': 'Paramètres' };
 
 function assetUrl(value: string | null | undefined): string | null { if (!value) return null; if (/^https?:\/\//i.test(value)) return value; return value.startsWith('/') ? value : `/${value}`; }
 
