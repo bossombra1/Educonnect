@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as userController from '../controllers/user.controller.js';
+import * as userCreateController from '../controllers/user-create.controller.js';
 import * as userLifecycleController from '../controllers/user-lifecycle.controller.js';
 import { getStudentsByParent, getParentsByStudent, linkParentStudent, unlinkParentStudent, getStudentProfile } from '../controllers/parent-students.controller.js';
 import { authenticate } from '../middleware/auth.js';
@@ -18,6 +19,10 @@ router.post('/parent-student', authenticate, requireAdmin(), linkParentStudent);
 router.delete('/parent-student/:parentId/:studentId', authenticate, requireAdmin(), unlinkParentStudent);
 router.get('/parents/list', authenticate, requireAdmin(), userController.getParents);
 router.get('/staff/list', authenticate, requireAdmin(), userController.getStaff);
+
+// Création des comptes métier : ADMIN, STUDENT et STAFF.
+// Cette route doit rester avant /:id.
+router.post('/managed', authenticate, requireAdmin(), userCreateController.createManagedUser);
 
 // Cycle de vie : ces routes doivent rester avant /:id.
 router.post('/:id/reactivate', authenticate, requireAdmin(), userLifecycleController.reactivateUser);
