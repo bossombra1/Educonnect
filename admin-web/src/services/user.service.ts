@@ -10,7 +10,30 @@ function normalizeUser(raw: ApiUser): User {
 function toApiPayload(input: Record<string, any>): Record<string, any> { const payload={...input}; if(payload.firstName!==undefined){payload.first_name=payload.firstName;delete payload.firstName;} if(payload.lastName!==undefined){payload.last_name=payload.lastName;delete payload.lastName;} if(payload.isActive!==undefined){payload.is_active=payload.isActive;delete payload.isActive;} if(payload.classId!==undefined){payload.class_id=payload.classId;delete payload.classId;} if(payload.roleId!==undefined){payload.role_id=payload.roleId;delete payload.roleId;} if(payload.role!==undefined&&payload.role_id===undefined)payload.role=String(payload.role).toUpperCase(); return payload; }
 
 export const userService = {
-  async getUsers(params: UserParams = {}): Promise<PaginatedResponse<User>> { const { data }=await apiClient.get<PaginatedResponse<ApiUser>>('/users',{params}); return {...data,data:data.data.map(normalizeUser)} as PaginatedResponse<User>; },
+  async getUsers(params: UserParams = {}): Promise<PaginatedResponse<User>> {
+    const requestedLimit = params.limit ?? 20;
+    if (requestedLimit > 100) {
+      const pageSize = 100;
+      const activeParams = { ...params, isActive: params.isActive ?? true };
+      let page = 1;
+      let totalPages = 1;
+      const allUsers: User[] = [];
+      let total = 0;
+      do {
+        const { data } = await apiClient.get<PaginatedResponse<ApiUser>>('/users', { params: { ...activeParams, page, limit: pageSize } });
+        allUsers.push(...data.data.map(normalizeUser));
+        total = Number(data.pagination?.total ?? allUsers.length);
+        totalPages = Math.max(1, Number(data.pagination?.totalPages ?? Math.ceil(total / pageSize)));
+        page += 1;
+      } while (page <= totalPages);
+      return {
+        data: allUsers,
+        pagination: { page: 1, limit: allUsers.length || pageSize, total: total || allUsers.length, totalPages: 1 },
+      } as PaginatedResponse<User>;
+    }
+    const { data }=await apiClient.get<PaginatedResponse<ApiUser>>('/users',{params});
+    return {...data,data:data.data.map(normalizeUser)} as PaginatedResponse<User>;
+  },
   async getUser(id:string):Promise<User>{const {data}=await apiClient.get<ApiResponse<ApiUser>>(`/users/${id}`);return normalizeUser(data.data);},
   async getStudentsByParent(parentId:string):Promise<User[]>{const {data}=await apiClient.get<ApiResponse<ApiUser[]>>(`/users/students/by-parent/${parentId}`);return data.data.map(normalizeUser);},
   async getParentsByStudent(studentId:string):Promise<User[]>{const {data}=await apiClient.get<ApiResponse<ApiUser[]>>(`/users/parents/by-student/${studentId}`);return data.data.map(normalizeUser);},
