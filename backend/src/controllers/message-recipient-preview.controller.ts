@@ -23,6 +23,10 @@ export async function previewRecipients(req: Request, res: Response): Promise<vo
     });
   } catch (err) {
     const message = (err as Error)?.message || 'Impossible de calculer les destinataires.';
+    if (message === 'Aucun destinataire spécifié.') {
+      res.status(200).json({ success: true, data: { recipient_count: 0, recipient_ids: [] } });
+      return;
+    }
     res.status(400).json({ success: false, error: message });
   }
 }
