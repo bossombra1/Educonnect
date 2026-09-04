@@ -3,67 +3,26 @@ import * as draftService from '../services/message-draft.service.js';
 import * as recipientService from '../services/message-recipient.service.js';
 import { RequestWithUser } from '../types/index.js';
 
-function values(value: unknown): string[] {
-  if (Array.isArray(value)) return value.flatMap((item) => String(item).split(',')).filter(Boolean);
-  if (value == null || value === '') return [];
-  return String(value).split(',').filter(Boolean);
-}
-
-function hasRecipientTargets(body: any): boolean {
-  return [body.groupIds ?? body.group_ids, body.classIds ?? body.class_ids, body.roleIds ?? body.roles, body.recipientIds ?? body.recipient_ids]
-    .some((value) => values(value).length > 0);
-}
-
-function attachmentsFromRequest(req: Request): draftService.DraftAttachment[] {
-  return (req.files as any[] || []).map((file) => ({
-    file_name: file.originalname,
-    file_url: file.path,
-    file_type: file.mimetype?.startsWith('image') ? 'image' : file.mimetype === 'application/pdf' ? 'pdf' : 'other',
-    file_size: Number(file.size) || 0,
-  }));
+function values(value: unknown): string[] { if (Array.isArray(value)) return value.flatMap((item) => String(item).split(',')).filter(Boolean); if (value == null || value === '') return []; return String(value).split(',').filter(Boolean); }
+async function resolveRecipients(body: any, establishmentId: number, senderId: number): Promise<number[] | undefined> {
+  const hasTargets = [body.groupIds ?? body.group_ids, body.classIds ?? body.class_ids, body.roleIds ?? body.roles, body.recipientIds ?? body.recipient_ids].some((value) => values(value).length > 0);
+  if (!hasTargets) return undefined;
+  return recipientService.resolveRecipientIds(establishmentId, body.groupIds ?? body.group_ids, body.classIds ?? body.class_ids, body.roleIds ?? body.roles, body.recipientIds ?? body.recipient_ids, senderId);
 }
 
 export async function createDraftMessage(req: RequestWithUser, res: Response): Promise<void> {
-  try {
-    const user = req.user as any;
-    const body = req.body as any;
-    const content = String(body.content || '').trim();
-    if (!content) {
-      res.status(400).json({ success: false, error: 'Le contenu du message est requis pour un brouillon.' });
-      return;
-    }
-
-    let recipientIds: number[] = [];
-    if (hasRecipientTargets(body)) {
-      recipientIds = await recipientService.resolveRecipientIds(
-        user.establishmentId,
-        body.groupIds ?? body.group_ids,
-        body.classIds ?? body.class_ids,
-        body.roleIds ?? body.roles,
-        body.recipientIds ?? body.recipient_ids,
-        user.userId,
-      );
-    }
-
-    const attachments = attachmentsFromRequest(req);
-    const result = await draftService.createDraftMessage(
-      {
-        title: body.title || undefined,
-        content,
-        message_type: body.type || body.message_type || 'text',
-        priority: body.priority || 'normal',
-        link_url: body.linkUrl || body.link_url || undefined,
-      },
-      user.userId,
-      user.establishmentId,
-      recipientIds,
-      attachments,
-    );
-
-    res.status(201).json({ success: true, data: result, message: 'Brouillon enregistré avec succès.' });
-  } catch (error) {
-    console.error('[Messages] Erreur enregistrement brouillon:', error);
-    const message = (error as Error)?.message || 'Impossible d’enregistrer le brouillon.';
-    res.status(400).json({ success: false, error: message });
-  }
+  try { const user = req.user as any; const body = req.body as any; const content = String(body.content || '').trim(); if (!content) { res.status(400).json({ success: false, error: 'Le contenu du message est requis pour un brouillon.' }); return; } const recipientIds = await resolveRecipients(body, user.establishmentId, user.userId); const attachments = (req.files as any[] || []).map((file) => ({ file_name: file.originalname, file_url: file.path, file_type: file.mimetype?.startsWith('image') ? 'image' : file.mimetype === 'application/pdf' ? 'pdf' : 'other', file_size: Number(file.size) || 0 })); const result = await draftService.createDraftMessage({ title: body.title || undefined, content, message_type: body.type || body.message_type || 'text', priority: body.priority || 'normal', link_url: body.linkUrl || body.link_url || undefined }, user.userId, user.establishmentId, recipientIds || [], attachments); res.status(201).json({ success: true, data: result, message: 'Brouillon enregistré avec succès.' }); }
+  catch (error) { console.error('[Messages] Erreur enregistrement brouillon:', error); res.status(400).json({ success: false, error: (error as Error)?.message || 'Impossible d’enregistrer le brouillon.' }); }
 }
+
+export async function listDrafts(req: Request, res: Response): Promise<void> { try { const user = req.user as any; res.status(200).json({ success: true, data: await draftService.getDrafts(user.establishmentId) }); } catch { res.status(500).json({ success: false, error: 'Impossible de charger les brouillons.' }); } }
+
+export async function getDraft(req: Request, res: Response): Promise<void> { try { const user = req.user as any; const id = Number.parseInt(req.params.id, 10); if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ success: false, error: 'ID de brouillon invalide.' }); return; } const draft = await draftService.getDraftById(id, user.establishmentId); if (!draft) { res.status(404).json({ success: false, error: 'Brouillon non trouvé.' }); return; } res.status(200).json({ success: true, data: draft }); } catch { res.status(500).json({ success: false, error: 'Impossible de charger le brouillon.' }); } }
+
+export async function updateDraft(req: RequestWithUser, res: Response): Promise<void> { try { const user = req.user as any; const id = Number.parseInt(req.params.id, 10); const body = req.body as any; const content = String(body.content || '').trim(); if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ success: false, error: 'ID de brouillon invalide.' }); return; } if (!content) { res.status(400).json({ success: false, error: 'Le contenu du message est requis.' }); return; } const recipientIds = await resolveRecipients(body, user.establishmentId, user.userId); const updated = await draftService.updateDraft(id, user.establishmentId, user.userId, { title: body.title || undefined, content, message_type: body.type || body.message_type || 'text', priority: body.priority || 'normal' }, recipientIds); if (!updated) { res.status(404).json({ success: false, error: 'Brouillon non trouvé ou non modifiable.' }); return; } res.status(200).json({ success: true, data: updated, message: 'Brouillon modifié avec succès.' }); } catch (error) { res.status(400).json({ success: false, error: (error as Error)?.message || 'Impossible de modifier le brouillon.' }); } }
+
+export async function removeDraft(req: RequestWithUser, res: Response): Promise<void> { try { const user = req.user as any; const id = Number.parseInt(req.params.id, 10); if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ success: false, error: 'ID de brouillon invalide.' }); return; } if (!(await draftService.deleteDraft(id, user.establishmentId, user.userId))) { res.status(404).json({ success: false, error: 'Brouillon non trouvé ou non supprimable.' }); return; } res.status(200).json({ success: true, message: 'Brouillon supprimé.' }); } catch (error) { res.status(400).json({ success: false, error: (error as Error)?.message || 'Impossible de supprimer le brouillon.' }); } }
+
+export async function sendDraft(req: RequestWithUser, res: Response): Promise<void> { try { const user = req.user as any; const id = Number.parseInt(req.params.id, 10); const result = await draftService.sendDraft(id, user.establishmentId, user.userId); if (!result) { res.status(404).json({ success: false, error: 'Brouillon non trouvé ou non envoyable.' }); return; } res.status(200).json({ success: true, data: result, message: 'Brouillon envoyé avec succès.' }); } catch (error) { res.status(400).json({ success: false, error: (error as Error)?.message || 'Impossible d’envoyer le brouillon.' }); } }
+
+export async function scheduleDraft(req: RequestWithUser, res: Response): Promise<void> { try { const user = req.user as any; const id = Number.parseInt(req.params.id, 10); const scheduledFor = (req.body as any).scheduledAt || (req.body as any).scheduled_for; if (!scheduledFor) { res.status(400).json({ success: false, error: 'La date de programmation est requise.' }); return; } const result = await draftService.scheduleDraft(id, user.establishmentId, user.userId, new Date(scheduledFor).toISOString()); if (!result) { res.status(404).json({ success: false, error: 'Brouillon non trouvé ou non programmable.' }); return; } res.status(200).json({ success: true, data: result, message: 'Brouillon programmé avec succès.' }); } catch (error) { res.status(400).json({ success: false, error: (error as Error)?.message || 'Impossible de programmer le brouillon.' }); } }
