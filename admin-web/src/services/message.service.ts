@@ -11,6 +11,13 @@ interface MessageParams {
   status?: string;
 }
 
+interface RecipientPreviewPayload {
+  groupIds?: string[];
+  classIds?: string[];
+  roleIds?: string[];
+  recipientIds?: string[];
+}
+
 function normalizeAttachment(raw: any): MessageAttachment {
   return {
     id: String(raw.id),
@@ -67,6 +74,10 @@ export const messageService = {
   async getScheduledMessage(id: string): Promise<any> { const { data } = await apiClient.get<ApiResponse<any>>(`/scheduled-messages/${id}`); return data.data; },
   async getMessage(id: string): Promise<Message> { const { data } = await apiClient.get<ApiResponse<any>>(`/messages/${id}`); return normalizeMessage(data.data); },
   async getMessageHistoryDetail(id: string): Promise<Message> { const { data } = await apiClient.get<ApiResponse<any>>(`/messages/history/${id}`); return normalizeMessage(data.data); },
+  async previewRecipients(payload: RecipientPreviewPayload): Promise<{ recipientCount: number; recipientIds: string[] }> {
+    const { data } = await apiClient.post<ApiResponse<{ recipient_count: number; recipient_ids: string[] }>>('/messages/recipients/preview', payload);
+    return { recipientCount: Number(data.data?.recipient_count || 0), recipientIds: data.data?.recipient_ids || [] };
+  },
   async sendMessage(formData: FormData): Promise<Message> { const { data } = await apiClient.post<ApiResponse<any>>('/messages', formData, { headers: { 'Content-Type': 'multipart/form-data' } }); return normalizeMessage(data.data); },
   async scheduleMessage(formData: FormData): Promise<Message> { const { data } = await apiClient.post<ApiResponse<any>>('/messages/schedule', formData, { headers: { 'Content-Type': 'multipart/form-data' } }); return normalizeMessage(data.data); },
   async getMessageStatistics(id: string): Promise<MessageStats> { const { data } = await apiClient.get<ApiResponse<MessageStats>>(`/messages/${id}/statistics`); return data.data; },
