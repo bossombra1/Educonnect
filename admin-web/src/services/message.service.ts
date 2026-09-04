@@ -100,6 +100,7 @@ function normalizeMessage(raw: any): Message {
     failedCount: Number(raw.failedCount ?? raw.failed_count ?? 0),
     acknowledgedCount: Number(raw.acknowledgedCount ?? raw.acknowledged_count ?? 0),
     totalRecipients: Number(raw.totalRecipients ?? raw.total_recipients ?? raw.recipient_count ?? recipients.length ?? 0),
+    establishmentName: raw.establishmentName || raw.establishment_name || undefined,
   };
 }
 
