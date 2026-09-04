@@ -38,11 +38,7 @@ function findHeaderRow(sheet: XLSX.WorkSheet): number {
     const headers = new Set((row || []).map(normalizeHeader));
     return [...required].every((column) => headers.has(column));
   });
-
-  if (headerIndex < 0) {
-    throw new Error('En-têtes introuvables. Le fichier doit contenir les colonnes : Nom, Prénom, Matricule, Classe.');
-  }
-
+  if (headerIndex < 0) throw new Error('En-têtes introuvables. Le fichier doit contenir les colonnes : Nom, Prénom, Matricule, Classe.');
   return headerIndex;
 }
 
@@ -65,12 +61,10 @@ function splitFullName(fullName: string): { firstName: string; lastName: string 
 
 function parseAdmissionDate(value: unknown): string | null {
   if (value === undefined || value === null || value === '') return null;
-
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) throw new Error('Date d’admission invalide.');
     return value.toISOString().slice(0, 10);
   }
-
   if (typeof value === 'number' && Number.isFinite(value)) {
     const parsed = XLSX.SSF.parse_date_code(value);
     if (!parsed || !parsed.y || !parsed.m || !parsed.d) throw new Error('Date d’admission Excel invalide.');
@@ -79,10 +73,8 @@ function parseAdmissionDate(value: unknown): string | null {
     if (Number.isNaN(check.getTime()) || check.toISOString().slice(0, 10) !== date) throw new Error('Date d’admission Excel invalide.');
     return date;
   }
-
   const text = String(value).trim();
   if (!text) return null;
-
   const normalized = text.replace(/\//g, '-').replace(/\s+/g, ' ');
   const isoMatch = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (isoMatch) {
@@ -90,43 +82,107 @@ function parseAdmissionDate(value: unknown): string | null {
     const check = new Date(`${date}T00:00:00Z`);
     if (!Number.isNaN(check.getTime()) && check.toISOString().slice(0, 10) === date) return date;
   }
-
   const frMatch = normalized.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
   if (frMatch) {
     const date = `${frMatch[3]}-${frMatch[2].padStart(2, '0')}-${frMatch[1].padStart(2, '0')}`;
     const check = new Date(`${date}T00:00:00Z`);
     if (!Number.isNaN(check.getTime()) && check.toISOString().slice(0, 10) === date) return date;
   }
-
   throw new Error('Date d’admission invalide. Utilisez AAAA-MM-JJ ou JJ-MM-AAAA.');
 }
 
-/**
- * Génère le modèle Excel officiel utilisé par l'import des élèves.
- * Les 4 premières colonnes sont obligatoires. Les coordonnées des élèves et parents sont facultatives.
- */
+function normalizePhone(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+function errorForRow(errors: ImportResult['errors'], row: number): boolean {
+  return errors.some((error) => error.row === row);
+}
+
+async function findParentByPhone(conn: any, establishmentId: number, phone: string): Promise<{ parentId: number; userId: number } | null> {
+  if (!phone) return null;
+  const [rows] = await conn.query<RowDataPacket[]>(
+    `SELECT p.id AS parent_id, u.id AS user_id
+     FROM parents p
+     JOIN users u ON u.id = p.user_id
+     WHERE p.establishment_id = ?
+       AND u.establishment_id = ?
+       AND u.is_active = 1
+       AND u.phone = ?
+     LIMIT 1`,
+    [establishmentId, establishmentId, phone]
+  );
+  return rows.length ? { parentId: Number(rows[0].parent_id), userId: Number(rows[0].user_id) } : null;
+}
+
+async function createParentIfNeeded(
+  conn: any,
+  establishmentId: number,
+  parentRoleId: number,
+  fullName: string,
+  phone: string,
+  fallbackLastName: string,
+  matriculePrefix: string,
+): Promise<{ parentId: number; userId: number }> {
+  const existing = await findParentByPhone(conn, establishmentId, phone);
+  if (existing) return existing;
+
+  const name = splitFullName(fullName);
+  const firstName = name.firstName || 'Parent';
+  const lastName = name.lastName || fallbackLastName;
+  let matricule = `${matriculePrefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  let attempt = 0;
+  while (attempt < 10) {
+    const [duplicates] = await conn.query<RowDataPacket[]>('SELECT id FROM users WHERE matricule = ? LIMIT 1', [matricule]);
+    if (!duplicates.length) break;
+    attempt += 1;
+    matricule = `${matriculePrefix}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  }
+  const password = await bcrypt.hash(matricule, 10);
+  const [userResult] = await conn.query<ResultSetHeader>(
+    'INSERT INTO users (establishment_id, role_id, matricule, first_name, last_name, phone, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+    [establishmentId, parentRoleId, matricule, firstName, lastName, phone || null, password]
+  );
+  const [parentResult] = await conn.query<ResultSetHeader>(
+    'INSERT INTO parents (user_id, establishment_id, profession, is_primary_contact) VALUES (?, ?, ?, ?)',
+    [userResult.insertId, establishmentId, null, 1]
+  );
+  return { parentId: parentResult.insertId, userId: userResult.insertId };
+}
+
+async function linkParentStudent(conn: any, parentId: number, studentId: number, priority: 'parent1' | 'parent2'): Promise<void> {
+  const [existing] = await conn.query<RowDataPacket[]>(
+    'SELECT id FROM parent_student WHERE parent_id = ? AND student_id = ? LIMIT 1',
+    [parentId, studentId]
+  );
+  if (existing.length) {
+    await conn.query(
+      'UPDATE parent_student SET priority = ?, is_emergency_contact = ? WHERE id = ?',
+      [priority, priority === 'parent1' ? 1 : 0, existing[0].id]
+    );
+    return;
+  }
+  await conn.query(
+    'INSERT INTO parent_student (parent_id, student_id, priority, is_emergency_contact) VALUES (?, ?, ?, ?)',
+    [parentId, studentId, priority, priority === 'parent1' ? 1 : 0]
+  );
+}
+
 export function generateStudentsImportTemplate(): Buffer {
   const workbook = XLSX.utils.book_new();
-
   const sheet = XLSX.utils.aoa_to_sheet([
     ['Modèle officiel — Import des élèves'],
     ['Nom', 'Prénom', 'Matricule', 'Classe', 'Date d’admission', 'E-mail élève', 'Téléphone élève', 'Nom complet Père', 'Tél Père', 'Nom complet Mère', 'Tél Mère'],
     ['YAPO', 'Jean', 'EXEMPLE', '3ème C', '2025-09-01', 'jean.yapo@gmail.com', '0748123456', 'Marie YAPO', '0708123456', 'Jean-Pierre YAPO', '0509123456'],
   ]);
-
-  sheet['!cols'] = [
-    { wch: 24 }, { wch: 24 }, { wch: 20 }, { wch: 18 }, { wch: 20 },
-    { wch: 30 }, { wch: 22 }, { wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 20 },
-  ];
+  sheet['!cols'] = [{ wch: 24 }, { wch: 24 }, { wch: 20 }, { wch: 18 }, { wch: 20 }, { wch: 30 }, { wch: 22 }, { wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 20 }];
   sheet['!freeze'] = { xSplit: 0, ySplit: 2 };
   sheet['!autofilter'] = { ref: 'A2:K3' };
-
   for (const address of ['A2', 'B2', 'C2', 'D2']) sheet[address].c = [{ a: 'EduConnect', t: 'Champ obligatoire' }];
   sheet['E2'].c = [{ a: 'EduConnect', t: 'Champ facultatif — date réelle d’admission' }];
   for (const address of ['F2', 'G2']) sheet[address].c = [{ a: 'EduConnect', t: 'Champ facultatif — coordonnées de l’élève' }];
   for (const address of ['H2', 'I2']) sheet[address].c = [{ a: 'EduConnect', t: 'Champ facultatif — coordonnées du père' }];
   for (const address of ['J2', 'K2']) sheet[address].c = [{ a: 'EduConnect', t: 'Champ facultatif — coordonnées de la mère' }];
-
   const instructions = XLSX.utils.aoa_to_sheet([
     ['Instructions d’utilisation'],
     ['Colonnes obligatoires', 'Nom, Prénom, Matricule, Classe'],
@@ -137,65 +193,78 @@ export function generateStudentsImportTemplate(): Buffer {
     ['Format', 'Conservez les noms exacts des colonnes et renseignez une ligne par élève.'],
   ]);
   instructions['!cols'] = [{ wch: 28 }, { wch: 110 }];
-
   XLSX.utils.book_append_sheet(workbook, sheet, 'Élèves');
   XLSX.utils.book_append_sheet(workbook, instructions, 'Instructions');
-
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
 }
 
 export async function importStudentsFromExcel(fileBuffer: Buffer, establishmentId: number, importedBy: number): Promise<ImportResult> {
   const pool = getPool();
   const result: ImportResult = { totalRows: 0, successCount: 0, failCount: 0, errors: [] };
-
   const [importer] = await pool.query<RowDataPacket[]>('SELECT id FROM users WHERE id = ? AND establishment_id = ?', [importedBy, establishmentId]);
-  if (importer.length === 0) throw new Error('Utilisateur importateur invalide pour cet établissement.');
+  if (!importer.length) throw new Error('Utilisateur importateur invalide pour cet établissement.');
 
   let workbook: XLSX.WorkBook;
   try { workbook = XLSX.read(fileBuffer, { type: 'buffer', cellDates: true }); }
   catch { throw new Error('Fichier Excel invalide ou corrompu.'); }
-
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) throw new Error('Le fichier Excel ne contient aucune feuille.');
   const sheet = workbook.Sheets[sheetName];
   const headerRow = findHeaderRow(sheet);
   const rawRows = XLSX.utils.sheet_to_json<ExcelRow>(sheet, { range: headerRow, defval: '' });
   const rows = rawRows.map(normalizeParentColumns);
-
   const importRows = rows.filter((row) => String(row.Matricule || '').trim().toUpperCase() !== TEMPLATE_EXAMPLE_MATRICULE);
   result.totalRows = importRows.length;
-  if (importRows.length === 0) throw new Error('Le fichier Excel ne contient aucune donnée élève après les en-têtes.');
+  if (!importRows.length) throw new Error('Le fichier Excel ne contient aucune donnée élève après les en-têtes.');
   for (const col of REQUIRED_COLUMNS) if (!(col in importRows[0])) throw new Error(`Colonne manquante: ${col}`);
 
   const matriculeSet = new Set<string>();
+  const duplicateRows = new Set<number>();
   for (let i = 0; i < importRows.length; i++) {
-    const matricule = String(importRows[i].Matricule || '').trim();
-    const excelRowNumber = rows.indexOf(importRows[i]) + headerRow + 2;
-    if (!matricule) { result.errors.push({ row: excelRowNumber, message: 'Matricule manquant.' }); result.failCount++; continue; }
-    if (matriculeSet.has(matricule)) { result.errors.push({ row: excelRowNumber, message: `Matricule en double: ${matricule}` }); result.failCount++; continue; }
+    const row = importRows[i];
+    const rowNumber = rows.indexOf(row) + headerRow + 2;
+    const matricule = String(row.Matricule || '').trim();
+    if (!matricule) {
+      result.errors.push({ row: rowNumber, message: 'Matricule manquant.' });
+      duplicateRows.add(rowNumber);
+      continue;
+    }
+    if (matriculeSet.has(matricule)) {
+      result.errors.push({ row: rowNumber, message: `Matricule en double: ${matricule}` });
+      duplicateRows.add(rowNumber);
+      continue;
+    }
     matriculeSet.add(matricule);
   }
 
   const uniqueMatricules = [...matriculeSet];
-  if (uniqueMatricules.length > 0) {
+  const existingMatricules = new Set<string>();
+  if (uniqueMatricules.length) {
     const placeholders = uniqueMatricules.map(() => '?').join(',');
-    const [existingUsers] = await pool.query<RowDataPacket[]>(`SELECT matricule FROM users WHERE establishment_id = ? AND matricule IN (${placeholders})`, [establishmentId, ...uniqueMatricules]);
-    const existingMatricules = new Set(existingUsers.map((u) => String(u.matricule)));
+    const [existingUsers] = await pool.query<RowDataPacket[]>(
+      `SELECT matricule FROM users WHERE establishment_id = ? AND matricule IN (${placeholders})`,
+      [establishmentId, ...uniqueMatricules]
+    );
+    for (const user of existingUsers) existingMatricules.add(String(user.matricule));
     for (let i = 0; i < importRows.length; i++) {
-      const matricule = String(importRows[i].Matricule || '').trim();
-      if (existingMatricules.has(matricule)) result.errors.push({ row: rows.indexOf(importRows[i]) + headerRow + 2, message: `Matricule déjà existant: ${matricule}` });
+      const row = importRows[i];
+      const rowNumber = rows.indexOf(row) + headerRow + 2;
+      const matricule = String(row.Matricule || '').trim();
+      if (existingMatricules.has(matricule) && !duplicateRows.has(rowNumber)) {
+        result.errors.push({ row: rowNumber, message: `Matricule déjà existant: ${matricule}` });
+        duplicateRows.add(rowNumber);
+      }
     }
-    result.failCount += importRows.filter((row) => existingMatricules.has(String(row.Matricule || '').trim())).length;
   }
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     const [studentRole] = await conn.query<RowDataPacket[]>("SELECT id FROM roles WHERE name = 'STUDENT' LIMIT 1");
-    const studentRoleId = studentRole[0]?.id;
+    const studentRoleId = Number(studentRole[0]?.id);
     if (!studentRoleId) throw new Error('Rôle STUDENT non trouvé dans la base.');
     const [parentRole] = await conn.query<RowDataPacket[]>("SELECT id FROM roles WHERE name = 'PARENT' LIMIT 1");
-    const parentRoleId = parentRole[0]?.id;
+    const parentRoleId = Number(parentRole[0]?.id);
     const parseClassName = (className: string) => {
       const match = className.match(/^(\d+[A-Za-z]?)(?:\s*[-–]\s*(\S+))?$/);
       return match ? { level: match[1], section: match[2] || null } : { level: className, section: null };
@@ -204,67 +273,94 @@ export async function importStudentsFromExcel(fileBuffer: Buffer, establishmentI
     for (let i = 0; i < importRows.length; i++) {
       const row = importRows[i];
       const excelRowNumber = rows.indexOf(row) + headerRow + 2;
-      const lastName = String(row['Nom'] || '').trim();
-      const firstName = String(row['Prénom'] || '').trim();
-      const matricule = String(row['Matricule'] || '').trim();
-      const className = String(row['Classe'] || '').trim();
-      const admissionDate = parseAdmissionDate(row['Date d’admission'] ?? row['admission_date']);
-      const studentEmail = String(row['E-mail élève'] || '').trim();
-      const studentPhone = String(row['Téléphone élève'] || '').trim();
-      const parent1FullName = String(row['Nom complet Parent 1'] || '').trim();
-      const parent2FullName = String(row['Nom complet Parent 2'] || '').trim();
-      const telParent1 = String(row['Tél Parent 1'] || '').trim();
-      const telParent2 = String(row['Tél Parent 2'] || '').trim();
-
-      if (!lastName || !firstName || !matricule || !className) { result.errors.push({ row: excelRowNumber, message: 'Champs requis manquants (Nom, Prénom, Matricule, Classe).' }); result.failCount++; continue; }
-      if (result.errors.some((e) => e.row === excelRowNumber && (e.message.includes('double') || e.message.includes('déjà')))) continue;
+      if (errorForRow(result.errors, excelRowNumber)) continue;
 
       try {
-        const [classes] = await conn.query<RowDataPacket[]>('SELECT id FROM classes WHERE name = ? AND establishment_id = ? AND school_year = ?', [className, establishmentId, DEFAULT_SCHOOL_YEAR]);
+        const lastName = String(row['Nom'] || '').trim();
+        const firstName = String(row['Prénom'] || '').trim();
+        const matricule = String(row['Matricule'] || '').trim();
+        const className = String(row['Classe'] || '').trim();
+        if (!lastName || !firstName || !matricule || !className) {
+          throw new Error('Champs requis manquants (Nom, Prénom, Matricule, Classe).');
+        }
+
+        const admissionDate = parseAdmissionDate(row['Date d’admission'] ?? row['admission_date']);
+        const studentEmail = String(row['E-mail élève'] || '').trim();
+        const studentPhone = String(row['Téléphone élève'] || '').trim();
+        const parent1FullName = String(row['Nom complet Parent 1'] || '').trim();
+        const parent2FullName = String(row['Nom complet Parent 2'] || '').trim();
+        const telParent1 = normalizePhone(row['Tél Parent 1']);
+        const telParent2 = normalizePhone(row['Tél Parent 2']);
+
+        const [classes] = await conn.query<RowDataPacket[]>(
+          'SELECT id FROM classes WHERE name = ? AND establishment_id = ? AND school_year = ?',
+          [className, establishmentId, DEFAULT_SCHOOL_YEAR]
+        );
         let classId: number;
-        if (classes.length === 0) {
+        if (!classes.length) {
           const parsed = parseClassName(className);
-          const [classResult] = await conn.query<ResultSetHeader>('INSERT INTO classes (establishment_id, name, level, section, school_year) VALUES (?, ?, ?, ?, ?)', [establishmentId, className, parsed.level, parsed.section, DEFAULT_SCHOOL_YEAR]);
+          const [classResult] = await conn.query<ResultSetHeader>(
+            'INSERT INTO classes (establishment_id, name, level, section, school_year) VALUES (?, ?, ?, ?, ?)',
+            [establishmentId, className, parsed.level, parsed.section, DEFAULT_SCHOOL_YEAR]
+          );
           classId = classResult.insertId;
-        } else classId = classes[0].id;
+        } else classId = Number(classes[0].id);
 
         const studentPassword = await bcrypt.hash(matricule, 10);
-        const [studentUser] = await conn.query<ResultSetHeader>('INSERT INTO users (establishment_id, role_id, matricule, first_name, last_name, email, phone, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)', [establishmentId, studentRoleId, matricule, firstName, lastName, studentEmail || null, studentPhone || null, studentPassword]);
-        const [studentResult] = await conn.query<ResultSetHeader>('INSERT INTO students (user_id, class_id, establishment_id, matricule_scolaire, admission_date, status) VALUES (?, ?, ?, ?, ?, \'active\')', [studentUser.insertId, classId, establishmentId, matricule, admissionDate]);
+        const [studentUser] = await conn.query<ResultSetHeader>(
+          'INSERT INTO users (establishment_id, role_id, matricule, first_name, last_name, email, phone, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)',
+          [establishmentId, studentRoleId, matricule, firstName, lastName, studentEmail || null, studentPhone || null, studentPassword]
+        );
+        const [studentResult] = await conn.query<ResultSetHeader>(
+          "INSERT INTO students (user_id, class_id, establishment_id, matricule_scolaire, admission_date, status) VALUES (?, ?, ?, ?, ?, 'active')",
+          [studentUser.insertId, classId, establishmentId, matricule, admissionDate]
+        );
         const studentId = studentResult.insertId;
 
         if ((parent1FullName || telParent1 || parent2FullName || telParent2) && parentRoleId) {
-          const parent1Name = splitFullName(parent1FullName);
-          const effectiveParent1FirstName = parent1Name.firstName || 'Parent';
-          const effectiveParent1LastName = parent1Name.lastName || lastName;
-          const parentPassword = await bcrypt.hash(`P-${matricule}`, 10);
-          const [parentUser] = await conn.query<ResultSetHeader>('INSERT INTO users (establishment_id, role_id, matricule, first_name, last_name, phone, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)', [establishmentId, parentRoleId, `P-${matricule}`, effectiveParent1FirstName, effectiveParent1LastName, telParent1 || null, parentPassword]);
-          const [parent] = await conn.query<ResultSetHeader>('INSERT INTO parents (user_id, establishment_id, profession, is_primary_contact) VALUES (?, ?, ?, ?)', [parentUser.insertId, establishmentId, null, 1]);
-          await conn.query("INSERT INTO parent_student (parent_id, student_id, priority, is_emergency_contact) VALUES (?, ?, 'parent1', 1)", [parent.insertId, studentId]);
-          if (telParent2 || parent2FullName) {
-            const parent2Name = splitFullName(parent2FullName);
-            const effectiveParent2FirstName = parent2Name.firstName || 'Parent';
-            const effectiveParent2LastName = parent2Name.lastName || lastName;
-            const parent2Password = await bcrypt.hash(`P2-${matricule}`, 10);
-            const [parent2User] = await conn.query<ResultSetHeader>('INSERT INTO users (establishment_id, role_id, matricule, first_name, last_name, phone, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)', [establishmentId, parentRoleId, `P2-${matricule}`, effectiveParent2FirstName, effectiveParent2LastName, telParent2 || null, parent2Password]);
-            const [parent2] = await conn.query<ResultSetHeader>('INSERT INTO parents (user_id, establishment_id, profession, is_primary_contact) VALUES (?, ?, ?, ?)', [parent2User.insertId, establishmentId, null, 0]);
-            await conn.query("INSERT INTO parent_student (parent_id, student_id, priority, is_emergency_contact) VALUES (?, ?, 'parent2', 0)", [parent2.insertId, studentId]);
+          const parent1Exists = Boolean(parent1FullName || telParent1);
+          const parent2Exists = Boolean(parent2FullName || telParent2);
+          let parent1: { parentId: number; userId: number } | null = null;
+          let parent2: { parentId: number; userId: number } | null = null;
+
+          if (parent1Exists) {
+            parent1 = await createParentIfNeeded(conn, establishmentId, parentRoleId, parent1FullName, telParent1, lastName, 'PAR');
+            await linkParentStudent(conn, parent1.parentId, studentId, 'parent1');
+          }
+
+          if (parent2Exists) {
+            const existingByPhone = telParent2 ? await findParentByPhone(conn, establishmentId, telParent2) : null;
+            if (existingByPhone && parent1 && existingByPhone.parentId === parent1.parentId) {
+              parent2 = existingByPhone;
+            } else if (parent1 && telParent1 && telParent2 && telParent1 === telParent2) {
+              parent2 = parent1;
+            } else {
+              parent2 = await createParentIfNeeded(conn, establishmentId, parentRoleId, parent2FullName, telParent2, lastName, 'PAR');
+            }
+            if (!parent1 || parent2.parentId !== parent1.parentId) {
+              await linkParentStudent(conn, parent2.parentId, studentId, 'parent2');
+            }
           }
         }
         result.successCount++;
       } catch (err) {
         result.errors.push({ row: excelRowNumber, message: `Erreur: ${(err as Error).message}` });
-        result.failCount++;
       }
     }
 
+    result.failCount = result.totalRows - result.successCount;
     const importStatus = result.failCount === 0 ? 'completed' : 'failed';
-    await conn.query<ResultSetHeader>('INSERT INTO imports (establishment_id, filename, file_url, total_rows, imported_rows, failed_rows, status, error_log, imported_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [establishmentId, 'import.xlsx', `uploads/import-${Date.now()}.xlsx`, result.totalRows, result.successCount, result.failCount, importStatus, result.errors.length > 0 ? JSON.stringify(result.errors) : null, importedBy]);
+    await conn.query<ResultSetHeader>(
+      'INSERT INTO imports (establishment_id, filename, file_url, total_rows, imported_rows, failed_rows, status, error_log, imported_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [establishmentId, 'import.xlsx', `uploads/import-${Date.now()}.xlsx`, result.totalRows, result.successCount, result.failCount, importStatus, result.errors.length ? JSON.stringify(result.errors) : null, importedBy]
+    );
     await conn.commit();
   } catch (err) {
     await conn.rollback();
     throw err;
-  } finally { conn.release(); }
+  } finally {
+    conn.release();
+  }
   return result;
 }
 
@@ -276,7 +372,7 @@ export async function previewImport(fileBuffer: Buffer): Promise<{ totalRows: nu
   const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { range: headerRow, defval: '' });
   const rows = rawRows.map(normalizeParentColumns);
   const filteredRows = rows.filter((row) => String(row.Matricule || '').trim().toUpperCase() !== TEMPLATE_EXAMPLE_MATRICULE);
-  return { totalRows: filteredRows.length, columns: rows.length > 0 ? Object.keys(rows[0]) : [], sampleRows: filteredRows.slice(0, 5) };
+  return { totalRows: filteredRows.length, columns: rows.length ? Object.keys(rows[0]) : [], sampleRows: filteredRows.slice(0, 5) };
 }
 
 export async function getImportHistory(establishmentId: number, pagination: { page?: number; limit?: number }): Promise<{ data: any[]; total: number; page: number; limit: number; totalPages: number }> {
@@ -285,7 +381,10 @@ export async function getImportHistory(establishmentId: number, pagination: { pa
   const limit = Math.min(100, Math.max(1, pagination.limit || 20));
   const offset = (page - 1) * limit;
   const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) as total FROM imports WHERE establishment_id = ?', [establishmentId]);
-  const total = countRows[0].total as number;
-  const [imports] = await pool.query<RowDataPacket[]>('SELECT i.*, u.email as imported_by_email FROM imports i LEFT JOIN users u ON u.id = i.imported_by AND u.establishment_id = i.establishment_id WHERE i.establishment_id = ? ORDER BY i.created_at DESC LIMIT ? OFFSET ?', [establishmentId, limit, offset]);
+  const total = Number(countRows[0].total);
+  const [imports] = await pool.query<RowDataPacket[]>(
+    'SELECT i.*, u.email as imported_by_email FROM imports i LEFT JOIN users u ON u.id = i.imported_by AND u.establishment_id = i.establishment_id WHERE i.establishment_id = ? ORDER BY i.created_at DESC LIMIT ? OFFSET ?',
+    [establishmentId, limit, offset]
+  );
   return { data: imports, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
