@@ -12,7 +12,8 @@ export interface User {
 export interface Student extends User { role: 'STUDENT'; matricule: string; classId: string; parentId?: string; class?: Class; }
 export interface Parent extends User { role: 'PARENT'; children?: Student[]; }
 export interface Staff extends User { role: 'STAFF'; fonction?: string; departement?: string; }
-export interface Class { id: string; name: string; level: string; section?: string; capacity: number; studentCount?: number; schoolYear: string; createdAt: string; updatedAt: string; }
+export interface Class { id: string; name: string; level: string; section?: string; capacity: number; studentCount?: number; activeStudentCount?: number; schoolYear: string; establishmentId?: string; establishmentName?: string; createdAt: string; updatedAt: string; }
+export interface ClassStudent { id: string; userId: string; firstName: string; lastName: string; matricule?: string; schoolMatricule?: string; phone?: string; status?: string; admissionDate?: string; }
 export interface Group { id: string; name: string; type: GroupType; description?: string; filters?: Record<string, any>; memberCount: number; establishmentId?: string; establishmentName?: string; createdAt: string; updatedAt: string; }
 export interface GroupMember { id: string; firstName: string; lastName: string; matricule?: string; phone?: string; role?: string; schoolMatricule?: string; studentStatus?: string; classId?: string; className?: string; classLevel?: string; classSection?: string; establishmentId?: string; establishmentName?: string; }
 export interface MessageAttachment { id: string; filename: string; url: string; mimeType: string; size: number; }
