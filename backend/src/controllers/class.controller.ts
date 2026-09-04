@@ -3,6 +3,8 @@ import { getPool } from '../config/database.js';
 import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 
 const DEFAULT_SCHOOL_YEAR = '2025-2026';
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
 
 export async function getClasses(req: Request, res: Response): Promise<void> {
   try {
@@ -11,6 +13,125 @@ export async function getClasses(req: Request, res: Response): Promise<void> {
     const [classes] = await pool.query<RowDataPacket[]>(`SELECT c.*, (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id AND s.status = 'active' AND s.establishment_id = c.establishment_id) as student_count FROM classes c WHERE c.establishment_id = ? AND c.school_year = ? ORDER BY c.name ASC`, [user.establishmentId, schoolYear]);
     res.status(200).json({ success: true, data: classes });
   } catch (err) { res.status(500).json({ success: false, error: (err as Error).message }); }
+}
+
+export async function getClassById(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user as any;
+    const classId = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(classId)) {
+      res.status(400).json({ success: false, error: 'ID de classe invalide.' });
+      return;
+    }
+
+    const pool = getPool();
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT c.*,
+              e.name AS establishment_name,
+              (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id AND s.establishment_id = c.establishment_id) AS student_count,
+              (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id AND s.establishment_id = c.establishment_id AND s.status = 'active') AS active_student_count
+       FROM classes c
+       LEFT JOIN establishments e ON e.id = c.establishment_id
+       WHERE c.id = ? AND c.establishment_id = ?
+       LIMIT 1`,
+      [classId, user.establishmentId]
+    );
+
+    if (rows.length === 0) {
+      res.status(404).json({ success: false, error: 'Classe non trouvée.' });
+      return;
+    }
+
+    res.status(200).json({ success: true, data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message });
+  }
+}
+
+export async function getClassStudents(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user as any;
+    const classId = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(classId)) {
+      res.status(400).json({ success: false, error: 'ID de classe invalide.' });
+      return;
+    }
+
+    const page = Math.max(1, Number.parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(
+      MAX_PAGE_SIZE,
+      Math.max(1, Number.parseInt(String(req.query.limit || DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE)
+    );
+    const offset = (page - 1) * limit;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+
+    const pool = getPool();
+    const [classRows] = await pool.query<RowDataPacket[]>(
+      'SELECT id FROM classes WHERE id = ? AND establishment_id = ? LIMIT 1',
+      [classId, user.establishmentId]
+    );
+
+    if (classRows.length === 0) {
+      res.status(404).json({ success: false, error: 'Classe non trouvée.' });
+      return;
+    }
+
+    const where: string[] = [
+      's.class_id = ?',
+      's.establishment_id = ?',
+      'u.establishment_id = ?',
+    ];
+    const params: any[] = [classId, user.establishmentId, user.establishmentId];
+
+    if (status) {
+      where.push('s.status = ?');
+      params.push(status);
+    }
+
+    if (search) {
+      where.push('(u.first_name LIKE ? OR u.last_name LIKE ? OR s.matricule_scolaire LIKE ? OR u.matricule LIKE ?)');
+      const pattern = `%${search}%`;
+      params.push(pattern, pattern, pattern, pattern);
+    }
+
+    const whereSql = where.join(' AND ');
+    const [countRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total
+       FROM students s
+       INNER JOIN users u ON u.id = s.user_id
+       WHERE ${whereSql}`,
+      params
+    );
+    const total = Number(countRows[0]?.total || 0);
+    const totalPages = Math.ceil(total / limit);
+
+    const [students] = await pool.query<RowDataPacket[]>(
+      `SELECT s.id,
+              s.user_id,
+              s.matricule_scolaire,
+              s.status,
+              s.admission_date,
+              u.first_name,
+              u.last_name,
+              u.matricule,
+              u.phone
+       FROM students s
+       INNER JOIN users u ON u.id = s.user_id
+       WHERE ${whereSql}
+       ORDER BY u.last_name ASC, u.first_name ASC, s.id ASC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: students,
+      pagination: { page, limit, total, totalPages },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message });
+  }
 }
 
 export async function createClass(req: Request, res: Response): Promise<void> {

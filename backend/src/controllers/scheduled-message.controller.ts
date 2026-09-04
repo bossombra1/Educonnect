@@ -18,7 +18,7 @@ export async function list(req: Request, res: Response): Promise<void> {
       const pool = getPool();
       const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM scheduled_messages WHERE establishment_id = ? AND status = ?', [user.establishmentId, status]);
       const total = Number(countRows[0]?.total || 0); const offset = (page - 1) * limit;
-      const [rows] = await pool.query<RowDataPacket[]>(`SELECT sm.*, m.title, m.content, m.message_type, m.priority FROM scheduled_messages sm JOIN messages m ON m.id = sm.message_id AND m.establishment_id = sm.establishment_id WHERE sm.establishment_id = ? AND sm.status = ? ORDER BY sm.scheduled_for DESC LIMIT ? OFFSET ?`, [user.establishmentId, status, limit, offset]);
+      const [rows] = await pool.query<RowDataPacket[]>(`SELECT sm.*, m.title, m.content, m.message_type, m.priority, m.sender_id, u.first_name AS sender_first_name, u.last_name AS sender_last_name FROM scheduled_messages sm JOIN messages m ON m.id = sm.message_id AND m.establishment_id = sm.establishment_id LEFT JOIN users u ON u.id = m.sender_id AND u.establishment_id = sm.establishment_id WHERE sm.establishment_id = ? AND sm.status = ? ORDER BY sm.scheduled_for DESC LIMIT ? OFFSET ?`, [user.establishmentId, status, limit, offset]);
       paginated(res, { data: rows, total, page, limit, totalPages: Math.ceil(total / limit) });
     } else {
       const result = await scheduledMessageService.getScheduledMessages(user.establishmentId, { page, limit });
@@ -31,10 +31,9 @@ export async function getById(req: Request, res: Response): Promise<void> {
   try {
     const id = parseInt(req.params.id, 10); const user = req.user as any;
     if (isNaN(id)) { error(res, 'Identifiant invalide.'); return; }
-    const pool = getPool();
-    const [rows] = await pool.query<RowDataPacket[]>(`SELECT sm.*, m.title, m.content, m.message_type, m.priority, m.sender_id FROM scheduled_messages sm JOIN messages m ON m.id = sm.message_id AND m.establishment_id = sm.establishment_id WHERE sm.id = ? AND sm.establishment_id = ?`, [id, user.establishmentId]);
-    if (!rows.length) { error(res, 'Message programmé non trouvé.', 404); return; }
-    success(res, rows[0]);
+    const scheduledMessage = await scheduledMessageService.getScheduledMessageById(id, user.establishmentId);
+    if (!scheduledMessage) { error(res, 'Message programmé non trouvé.', 404); return; }
+    success(res, scheduledMessage);
   } catch { error(res, 'Erreur lors de la récupération du message programmé.'); }
 }
 
@@ -51,8 +50,8 @@ export async function update(req: Request, res: Response): Promise<void> {
     if (status === 'cancelled') {
       if (record.status !== 'pending') { error(res, 'Seuls les messages en attente peuvent être annulés.'); return; }
       await scheduledMessageService.cancelScheduledMessage(id, user.establishmentId);
-      const [updated] = await pool.query<RowDataPacket[]>(`SELECT sm.*, m.title, m.content, m.message_type, m.priority FROM scheduled_messages sm JOIN messages m ON m.id = sm.message_id AND m.establishment_id = sm.establishment_id WHERE sm.id = ? AND sm.establishment_id = ?`, [id, user.establishmentId]);
-      success(res, updated[0]); return;
+      const updated = await scheduledMessageService.getScheduledMessageById(id, user.establishmentId);
+      success(res, updated); return;
     }
     if (status) {
       const allowed = VALID_TRANSITIONS[record.status as string] || [];
@@ -67,8 +66,8 @@ export async function update(req: Request, res: Response): Promise<void> {
     }
     setParts.push('updated_at = NOW()'); params.push(id, user.establishmentId);
     await pool.query(`UPDATE scheduled_messages SET ${setParts.join(', ')} WHERE id = ? AND establishment_id = ?`, params);
-    const [updated] = await pool.query<RowDataPacket[]>(`SELECT sm.*, m.title, m.content, m.message_type, m.priority FROM scheduled_messages sm JOIN messages m ON m.id = sm.message_id AND m.establishment_id = sm.establishment_id WHERE sm.id = ? AND sm.establishment_id = ?`, [id, user.establishmentId]);
-    success(res, updated[0]);
+    const updated = await scheduledMessageService.getScheduledMessageById(id, user.establishmentId);
+    success(res, updated);
   } catch (err) { error(res, (err as Error).message || 'Erreur lors de la mise à jour du message programmé.'); }
 }
 
@@ -108,8 +107,8 @@ export async function processNow(req: Request, res: Response): Promise<void> {
           await sendBulkPushNotifications(recipients.map((r) => r.user_id as number), (record.title as string) || 'Message programmé', ((record.content as string) || '').substring(0, 100), { messageId: record.message_id.toString(), type: 'MESSAGE' });
         } catch { /* Push failure does not fail message processing. */ }
       }
-      const [updated] = await pool.query<RowDataPacket[]>(`SELECT sm.*, m.title, m.content, m.message_type, m.priority FROM scheduled_messages sm JOIN messages m ON m.id = sm.message_id AND m.establishment_id = sm.establishment_id WHERE sm.id = ? AND sm.establishment_id = ?`, [id, user.establishmentId]);
-      success(res, updated[0]);
+      const updated = await scheduledMessageService.getScheduledMessageById(id, user.establishmentId);
+      success(res, updated);
     } catch (processErr) {
       const errorMsg = (processErr as Error).message; const newRetryCount = Number(record.retry_count || 0) + 1;
       if (newRetryCount >= 3) {

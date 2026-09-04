@@ -53,8 +53,12 @@ export async function getMessageRecipients(messageId: number, establishmentId: n
   const safePage = Math.max(1, page);
   const safeLimit = Math.min(100, Math.max(1, limit));
   const offset = (safePage - 1) * safeLimit;
-  const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM message_recipients mr JOIN messages m ON m.id = mr.message_id WHERE mr.message_id = ? AND m.establishment_id = ?', [messageId, establishmentId]);
+  const [countRows] = await pool.query<RowDataPacket[]>(
+    'SELECT COUNT(*) AS total FROM message_recipients mr JOIN messages m ON m.id = mr.message_id WHERE mr.message_id = ? AND m.establishment_id = ?',
+    [messageId, establishmentId]
+  );
   const total = Number(countRows[0]?.total || 0);
+
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT
        mr.id,
@@ -62,36 +66,70 @@ export async function getMessageRecipients(messageId: number, establishmentId: n
        u.first_name,
        u.last_name,
        u.matricule,
+       u.phone,
+       r.name AS role_name,
+       e.id AS establishment_id,
+       e.name AS establishment_name,
+       s.matricule_scolaire,
+       s.status AS student_status,
+       c.id AS class_id,
        c.name AS class_name,
+       c.level AS class_level,
+       c.section AS class_section,
        mr.delivery_status,
        mr.delivered_at,
        mr2.read_at,
        ma.acknowledged_at,
+       GROUP_CONCAT(DISTINCT g.name ORDER BY g.name SEPARATOR ', ') AS group_names,
        CASE
          WHEN ma.id IS NOT NULL THEN 'acknowledged'
          WHEN mr2.id IS NOT NULL THEN 'read'
          WHEN mr.delivery_status = 'delivered' THEN 'delivered'
+         WHEN mr.delivery_status = 'failed' THEN 'failed'
          ELSE 'pending'
        END AS status
      FROM message_recipients mr
      JOIN messages m ON m.id = mr.message_id
      JOIN users u ON u.id = mr.user_id
+     LEFT JOIN roles r ON r.id = u.role_id
+     LEFT JOIN establishments e ON e.id = u.establishment_id
      LEFT JOIN students s ON s.user_id = u.id AND s.establishment_id = m.establishment_id
      LEFT JOIN classes c ON c.id = s.class_id AND c.establishment_id = m.establishment_id
+     LEFT JOIN group_members gm ON gm.user_id = u.id
+     LEFT JOIN \`groups\` g ON g.id = gm.group_id AND g.establishment_id = m.establishment_id
      LEFT JOIN message_reads mr2 ON mr2.message_id = mr.message_id AND mr2.user_id = mr.user_id
      LEFT JOIN message_acknowledgements ma ON ma.message_id = mr.message_id AND ma.user_id = mr.user_id
-     WHERE mr.message_id = ? AND m.establishment_id = ?
+     WHERE mr.message_id = ?
+       AND m.establishment_id = ?
+       AND u.establishment_id = m.establishment_id
+     GROUP BY mr.id, mr.user_id, u.first_name, u.last_name, u.matricule, u.phone,
+              r.name, e.id, e.name, s.matricule_scolaire, s.status,
+              c.id, c.name, c.level, c.section, mr.delivery_status,
+              mr.delivered_at, mr2.read_at, ma.acknowledged_at
      ORDER BY u.last_name, u.first_name
      LIMIT ? OFFSET ?`,
     [messageId, establishmentId, safeLimit, offset]
   );
+
   return {
     data: rows.map((row) => ({
       id: String(row.id),
       user_id: String(row.user_id),
       first_name: row.first_name,
       last_name: row.last_name,
-      class_name: row.class_name,
+      matricule: row.matricule,
+      phone: row.phone || null,
+      role_name: row.role_name || null,
+      establishment_id: row.establishment_id != null ? String(row.establishment_id) : null,
+      establishment_name: row.establishment_name || null,
+      matricule_scolaire: row.matricule_scolaire || null,
+      student_status: row.student_status || null,
+      class_id: row.class_id != null ? String(row.class_id) : null,
+      class_name: row.class_name || null,
+      class_level: row.class_level || null,
+      class_section: row.class_section || null,
+      group_names: row.group_names || null,
+      delivery_status: row.delivery_status,
       status: row.status,
       delivered_at: row.delivered_at,
       read_at: row.read_at,

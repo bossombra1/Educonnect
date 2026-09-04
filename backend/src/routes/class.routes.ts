@@ -6,6 +6,8 @@ import { requireAdmin } from '../middleware/rbac.js';
 const router = Router();
 
 router.get('/', authenticate, requireAdmin(), classController.getClasses);
+router.get('/:id', authenticate, requireAdmin(), classController.getClassById);
+router.get('/:id/students', authenticate, requireAdmin(), classController.getClassStudents);
 router.post('/', authenticate, requireAdmin(), classController.createClass);
 router.put('/:id', authenticate, requireAdmin(), classController.updateClass);
 router.delete('/:id', authenticate, requireAdmin(), classController.deleteClass);
