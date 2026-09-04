@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as messageController from '../controllers/message.controller.js';
+import * as messageRecipientPreviewController from '../controllers/message-recipient-preview.controller.js';
 import { authenticate } from '../middleware/auth.js';
 import { requireAdmin, requireMobileUser } from '../middleware/rbac.js';
 import { uploadMiddleware } from '../middleware/upload.js';
@@ -10,6 +11,7 @@ router.get('/', authenticate, messageController.getMessages);
 router.get('/history', authenticate, requireAdmin(), messageController.getMessageHistory);
 router.get('/history/:id', authenticate, requireAdmin(), messageController.getMessageHistoryDetail);
 router.get('/unread-count', authenticate, requireMobileUser(), messageController.getUnreadCount);
+router.post('/recipients/preview', authenticate, requireAdmin(), messageRecipientPreviewController.previewRecipients);
 router.get('/:id/recipients', authenticate, requireAdmin(), messageController.getMessageRecipients);
 router.get('/:id/recipient-stats', authenticate, requireAdmin(), messageController.getMessageRecipientStats);
 router.get('/:id', authenticate, messageController.getMessageById);
