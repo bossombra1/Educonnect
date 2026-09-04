@@ -13,7 +13,8 @@ export interface Student extends User { role: 'STUDENT'; matricule: string; clas
 export interface Parent extends User { role: 'PARENT'; children?: Student[]; }
 export interface Staff extends User { role: 'STAFF'; fonction?: string; departement?: string; }
 export interface Class { id: string; name: string; level: string; section?: string; capacity: number; studentCount?: number; schoolYear: string; createdAt: string; updatedAt: string; }
-export interface Group { id: string; name: string; type: GroupType; description?: string; filters?: Record<string, string[]>; memberCount: number; createdAt: string; updatedAt: string; }
+export interface Group { id: string; name: string; type: GroupType; description?: string; filters?: Record<string, any>; memberCount: number; establishmentId?: string; establishmentName?: string; createdAt: string; updatedAt: string; }
+export interface GroupMember { id: string; firstName: string; lastName: string; matricule?: string; phone?: string; role?: string; schoolMatricule?: string; studentStatus?: string; classId?: string; className?: string; classLevel?: string; classSection?: string; establishmentId?: string; establishmentName?: string; }
 export interface MessageAttachment { id: string; filename: string; url: string; mimeType: string; size: number; }
 export interface MessageRecipient {
   id?: string;
@@ -51,7 +52,7 @@ export interface LoginRequest { email: string; password: string; }
 export interface LoginResponse { user: User; token: string; }
 export interface CreateMessageForm { title?: string; content: string; type: MessageType; priority: MessagePriority; recipientIds?: string[]; groupIds?: string[]; classIds?: string[]; roleIds?: UserRole[]; scheduledAt?: string; attachments?: File[]; }
 export interface ImportResult { totalRows: number; successCount: number; failCount: number; errors: { row: number; message: string }[]; }
-export interface CreateGroupForm { name: string; type: GroupType; description?: string; filters?: Record<string, string[]>; }
+export interface CreateGroupForm { name: string; type: GroupType; description?: string; filters?: Record<string, any>; }
 export interface Notification {
   id: number;
   title: string;
