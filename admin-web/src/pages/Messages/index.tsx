@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, Clock, Save, Users, BookOpen, UserCheck, User, AlertCircle } from 'lucide-react';
+import { Send, Clock, Save, Users, BookOpen, UserCheck, User, AlertCircle, RefreshCw } from 'lucide-react';
 import { messageService } from '@/services/message.service';
 import { groupService } from '@/services/group.service';
 import { classService } from '@/services/class.service';
@@ -41,6 +41,9 @@ export default function MessagesPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [groups, setGroups] = useState<Group[]>([]); const [classes, setClasses] = useState<Class[]>([]); const [users, setUsers] = useState<TUser[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [recipientPreviewCount, setRecipientPreviewCount] = useState(0);
+  const [recipientPreviewLoading, setRecipientPreviewLoading] = useState(false);
+  const [recipientPreviewError, setRecipientPreviewError] = useState<string | null>(null);
 
   const loadRecipients = async () => {
     setLoadError(null);
@@ -54,7 +57,47 @@ export default function MessagesPage() {
 
   useEffect(() => { void loadRecipients(); }, []);
 
-  const totalRecipients = selectedGroupIds.length + selectedClassIds.length + selectedRoles.length + selectedUserIds.length;
+  const selectedTargetCount = selectedGroupIds.length + selectedClassIds.length + selectedRoles.length + selectedUserIds.length;
+  const previewPayload = () => ({ groupIds: selectedGroupIds, classIds: selectedClassIds, roleIds: selectedRoles, recipientIds: selectedUserIds });
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (selectedTargetCount === 0) {
+        setRecipientPreviewCount(0);
+        setRecipientPreviewError(null);
+        setRecipientPreviewLoading(false);
+        return;
+      }
+      setRecipientPreviewLoading(true);
+      setRecipientPreviewError(null);
+      try {
+        const result = await messageService.previewRecipients(previewPayload());
+        if (!cancelled) setRecipientPreviewCount(result.recipientCount);
+      } catch (error) {
+        if (!cancelled) {
+          setRecipientPreviewCount(0);
+          setRecipientPreviewError(getApiErrorMessage(error, 'Impossible de calculer les destinataires réels.'));
+        }
+      } finally {
+        if (!cancelled) setRecipientPreviewLoading(false);
+      }
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [selectedGroupIds, selectedClassIds, selectedRoles, selectedUserIds, selectedTargetCount]);
+
+  const refreshRecipientPreview = async () => {
+    if (selectedTargetCount === 0) return;
+    setRecipientPreviewLoading(true); setRecipientPreviewError(null);
+    try {
+      const result = await messageService.previewRecipients(previewPayload());
+      setRecipientPreviewCount(result.recipientCount);
+    } catch (error) {
+      setRecipientPreviewCount(0);
+      setRecipientPreviewError(getApiErrorMessage(error, 'Impossible de calculer les destinataires réels.'));
+    } finally { setRecipientPreviewLoading(false); }
+  };
+
   const toggleGroup = (id: string) => setSelectedGroupIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   const toggleClass = (id: string) => setSelectedClassIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   const toggleRole = (role: UserRole) => setSelectedRoles(prev => prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]);
@@ -72,7 +115,7 @@ export default function MessagesPage() {
     selectedRoles.forEach(r => fd.append('roleIds', r)); selectedUserIds.forEach(id => fd.append('recipientIds', id)); attachments.forEach(f => fd.append('attachments', f));
     return fd;
   };
-  const validate = (): boolean => { const errs: Record<string, string> = {}; if (!content.trim()) errs.content = 'Le contenu du message est requis'; if (totalRecipients === 0) errs.recipients = 'Sélectionnez au moins un destinataire'; setErrors(errs); return Object.keys(errs).length === 0; };
+  const validate = (): boolean => { const errs: Record<string, string> = {}; if (!content.trim()) errs.content = 'Le contenu du message est requis'; if (selectedTargetCount === 0) errs.recipients = 'Sélectionnez au moins un destinataire'; setErrors(errs); return Object.keys(errs).length === 0; };
 
   const handleSend = async () => { if (!validate()) return; setSending(true); try { await messageService.sendMessage(buildFormData()); toast.success('Message envoyé avec succès'); navigate('/historique'); } catch (error) { console.error('Erreur envoi message:', error); toast.error(getApiErrorMessage(error, 'Impossible d’envoyer le message. Réessayez.')); } finally { setSending(false); } };
   const handleSchedule = async () => { if (!validate()) return; if (!scheduleDate || !scheduleTime) { toast.error("Veuillez spécifier la date et l'heure"); return; } setScheduling(true); try { const fd = buildFormData(); fd.append('scheduledAt', new Date(`${scheduleDate}T${scheduleTime}`).toISOString()); await messageService.scheduleMessage(fd); toast.success('Message programmé'); navigate('/programmes'); } catch (error) { console.error('Erreur programmation message:', error); toast.error(getApiErrorMessage(error, 'Impossible de programmer le message. Réessayez.')); } finally { setScheduling(false); } };
@@ -94,7 +137,7 @@ export default function MessagesPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Input label="Titre (optionnel)" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Réunion parents-professeurs" /><div className="grid grid-cols-2 gap-3"><Select label="Type" options={typeOptions} value={msgType} onChange={(e) => setMsgType(e.target.value as MessageType)} /><Select label="Priorité" options={priorityOptions} value={priority} onChange={(e) => setPriority(e.target.value as MessagePriority)} /></div></div>
           <div><label className="mb-1.5 block text-sm font-medium text-slate-700">Contenu du message *</label><textarea value={content} onChange={(e) => setContent(e.target.value)} rows={5} placeholder="Saisissez votre message ici..." className={cn('w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20', errors.content && 'border-red-500 focus:border-red-500 focus:ring-red-500/20')} />{errors.content && <p className="mt-1 text-xs text-red-600">{errors.content}</p>}</div>
           <FileUpload accept="image/*,.pdf" onFileSelect={setAttachments} label="Pièces jointes" />
-          <div><div className="mb-2 flex items-center justify-between gap-3"><label className="text-sm font-medium text-slate-700">Destinataires *</label>{totalRecipients > 0 && <span className="rounded-md bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-700">{totalRecipients} destinataire(s) sélectionné(s)</span>}</div>{errors.recipients && <div className="mb-2 flex items-center gap-1.5 text-xs text-red-600"><AlertCircle className="h-4 w-4" /> {errors.recipients}</div>}
+          <div><div className="mb-2 flex items-center justify-between gap-3"><div><label className="text-sm font-medium text-slate-700">Destinataires *</label><p className="mt-0.5 text-xs text-muted">Le compteur est calculé sur les utilisateurs réels, avec déduplication automatique.</p></div>{selectedTargetCount > 0 && <div className="flex items-center gap-2"><span className={cn('rounded-md px-2.5 py-1 text-xs font-semibold', recipientPreviewError ? 'bg-red-50 text-red-700' : 'bg-primary-50 text-primary-700')}>{recipientPreviewLoading ? 'Calcul…' : `${recipientPreviewCount} destinataire(s) réel(s)`}</span><button type="button" onClick={() => void refreshRecipientPreview()} disabled={recipientPreviewLoading} title="Actualiser le nombre réel" className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><RefreshCw className={cn('h-4 w-4', recipientPreviewLoading && 'animate-spin')} /></button></div>}</div>{recipientPreviewError && <div role="alert" className="mb-2 flex items-center gap-1.5 text-xs text-red-600"><AlertCircle className="h-4 w-4" /> {recipientPreviewError}</div>}{errors.recipients && <div className="mb-2 flex items-center gap-1.5 text-xs text-red-600"><AlertCircle className="h-4 w-4" /> {errors.recipients}</div>}
             <div className="mb-2 grid grid-cols-2 gap-1 rounded-md border border-line bg-slate-50 p-1 sm:grid-cols-4">{tabs.map(tab => <button type="button" key={tab.key} onClick={() => setActiveTab(tab.key)} className={cn('flex items-center justify-center gap-1.5 rounded px-2 py-2 text-xs font-semibold transition-colors', activeTab === tab.key ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:bg-white/70 hover:text-slate-700')}>{tab.icon} <span>{tab.label}</span></button>)}</div>
             <div className="max-h-56 overflow-y-auto rounded-md border border-line bg-white">
               {activeTab === 'groups' && groups.length === 0 && <div className="p-4 text-center text-xs text-slate-500">Aucun groupe disponible. Créez-en depuis la page Groupes.</div>}
