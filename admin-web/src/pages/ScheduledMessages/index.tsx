@@ -21,6 +21,10 @@ type ScheduledRow = {
   status: 'pending' | 'processing' | 'sent' | 'failed' | 'cancelled';
   retryCount: number;
   errorMessage?: string | null;
+  recipientCount: number;
+  targetGroups: Array<{ id: string; name: string; type?: string }>;
+  targetClasses: Array<{ id: string; name: string; level?: string; section?: string }>;
+  senderName: string;
 };
 
 const statusBadge: Record<ScheduledRow['status'], 'warning' | 'info' | 'success' | 'danger'> = { pending: 'warning', processing: 'info', sent: 'success', failed: 'danger', cancelled: 'info' };
@@ -50,6 +54,10 @@ export default function ScheduledMessagesPage() {
         status: row.status,
         retryCount: Number(row.retry_count || 0),
         errorMessage: row.error_message || null,
+        recipientCount: Number(row.recipient_count || 0),
+        targetGroups: Array.isArray(row.target_groups) ? row.target_groups.map((group: any) => ({ id: String(group.id), name: group.name || '', type: group.type })) : [],
+        targetClasses: Array.isArray(row.target_classes) ? row.target_classes.map((item: any) => ({ id: String(item.id), name: item.name || '', level: item.level, section: item.section })) : [],
+        senderName: [row.sender_first_name, row.sender_last_name].filter(Boolean).join(' ') || '—',
       }));
       setMessages(rows);
     } catch (error) {
@@ -83,7 +91,7 @@ export default function ScheduledMessagesPage() {
 
   const columns: Column<ScheduledRow>[] = [
     { key: 'title', header: 'Titre', render: (row) => <span className="font-medium text-slate-900">{row.title || 'Sans titre'}</span> },
-    { key: 'recipients', header: 'Destinataires', render: () => <span className="text-xs text-slate-500">À la programmation</span> },
+    { key: 'recipients', header: 'Destinataires', render: (row) => <span className="text-xs font-medium text-slate-700">{row.recipientCount}</span> },
     { key: 'scheduledAt', header: 'Date programmée', render: (row) => <span className="text-xs text-slate-600">{formatDateTime(row.scheduledAt)}</span> },
     { key: 'status', header: 'Statut', render: (row) => <Badge variant={statusBadge[row.status] || 'info'}>{statusLabel[row.status] || row.status}</Badge> },
     { key: 'priority', header: 'Priorité', render: (row) => <span className={getPriorityColor(row.priority)}>{getPriorityLabel(row.priority)}</span> },
@@ -99,7 +107,7 @@ export default function ScheduledMessagesPage() {
       {loadError && <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700"><span>{loadError}</span><Button variant="secondary" onClick={() => void fetchScheduled()}>Réessayer</Button></div>}
       <Card className="!p-0 overflow-hidden"><Table columns={columns} data={messages} loading={loading} keyExtractor={(row) => row.id} emptyMessage={loadError ? 'Impossible de charger les messages' : 'Aucun message programmé'} /></Card>
       <Modal open={!!detailMsg} onClose={() => setDetailMsg(null)} title={detailMsg?.title || 'Détails du message'} size="lg">
-        {detailMsg && <div className="space-y-4"><div><span className="text-xs font-medium text-muted">Contenu :</span><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-900">{detailMsg.content}</p></div><div className="grid grid-cols-1 gap-3 border-y border-line py-3 text-xs sm:grid-cols-2"><div><span className="text-muted">Type :</span> <span className="font-medium text-slate-900">{detailMsg.messageType}</span></div><div><span className="text-muted">Priorité :</span> <span className={getPriorityColor(detailMsg.priority)}>{getPriorityLabel(detailMsg.priority)}</span></div><div><span className="text-muted">Programmation :</span> <span className="font-medium text-slate-900">{formatDateTime(detailMsg.scheduledAt)}</span></div><div><span className="text-muted">Tentatives :</span> <span className="font-medium text-slate-900">{detailMsg.retryCount}</span></div></div>{detailMsg.errorMessage && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">Dernière erreur : {detailMsg.errorMessage}</div>}</div>}
+        {detailMsg && <div className="space-y-4"><div><span className="text-xs font-medium text-muted">Contenu :</span><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-900">{detailMsg.content}</p></div><div className="grid grid-cols-1 gap-3 border-y border-line py-3 text-xs sm:grid-cols-2"><div><span className="text-muted">Auteur :</span> <span className="font-medium text-slate-900">{detailMsg.senderName}</span></div><div><span className="text-muted">Destinataires :</span> <span className="font-medium text-slate-900">{detailMsg.recipientCount}</span></div><div><span className="text-muted">Type :</span> <span className="font-medium text-slate-900">{detailMsg.messageType}</span></div><div><span className="text-muted">Priorité :</span> <span className={getPriorityColor(detailMsg.priority)}>{getPriorityLabel(detailMsg.priority)}</span></div><div><span className="text-muted">Programmation :</span> <span className="font-medium text-slate-900">{formatDateTime(detailMsg.scheduledAt)}</span></div><div><span className="text-muted">Tentatives :</span> <span className="font-medium text-slate-900">{detailMsg.retryCount}</span></div></div>{detailMsg.targetGroups.length > 0 && <div><span className="text-xs font-medium text-muted">Groupes ciblés</span><div className="mt-2 flex flex-wrap gap-2">{detailMsg.targetGroups.map((group) => <Badge key={group.id} variant="info">{group.name}</Badge>)}</div></div>}{detailMsg.targetClasses.length > 0 && <div><span className="text-xs font-medium text-muted">Classes concernées</span><div className="mt-2 flex flex-wrap gap-2">{detailMsg.targetClasses.map((item) => <Badge key={item.id} variant="info">{item.name}{item.section ? ` — ${item.section}` : ''}</Badge>)}</div></div>}{detailMsg.errorMessage && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">Dernière erreur : {detailMsg.errorMessage}</div>}</div>}
       </Modal>
       <ConfirmDialog open={!!cancelTarget} title="Annuler le message" message="Voulez-vous vraiment annuler l'envoi programmé de ce message ?" onConfirm={handleCancel} onCancel={() => setCancelTarget(null)} loading={cancelling} />
     </div>

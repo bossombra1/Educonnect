@@ -67,14 +67,26 @@ async function enrichScheduledRows(rows: RowDataPacket[], establishmentId: numbe
   }));
 }
 
-export async function getScheduledMessages(establishmentId: number, pagination: { page?: number; limit?: number }): Promise<{ data: any[]; total: number; page: number; limit: number; totalPages: number }> {
+export async function getScheduledMessages(establishmentId: number, pagination: { page?: number; limit?: number; status?: string }): Promise<{ data: any[]; total: number; page: number; limit: number; totalPages: number }> {
   const pool = getPool();
   const page = Math.max(1, pagination.page || 1);
   const limit = Math.min(100, Math.max(1, pagination.limit || 20));
   const offset = (page - 1) * limit;
-  const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) as total FROM scheduled_messages WHERE establishment_id = ?', [establishmentId]);
+  const status = pagination.status;
+
+  let countSql = 'SELECT COUNT(*) AS total FROM scheduled_messages WHERE establishment_id = ?';
+  const countParams: any[] = [establishmentId];
+  if (status) { countSql += ' AND status = ?'; countParams.push(status); }
+  const [countRows] = await pool.query<RowDataPacket[]>(countSql, countParams);
   const total = Number(countRows[0]?.total || 0);
-  const [messages] = await pool.query<RowDataPacket[]>(`SELECT sm.*, m.title, m.content, m.message_type, m.priority, m.sender_id, u.first_name AS sender_first_name, u.last_name AS sender_last_name FROM scheduled_messages sm JOIN messages m ON m.id = sm.message_id AND m.establishment_id = sm.establishment_id LEFT JOIN users u ON u.id = m.sender_id AND u.establishment_id = sm.establishment_id WHERE sm.establishment_id = ? ORDER BY sm.scheduled_for DESC LIMIT ? OFFSET ?`, [establishmentId, limit, offset]);
+
+  let messagesSql = `SELECT sm.*, m.title, m.content, m.message_type, m.priority, m.sender_id, u.first_name AS sender_first_name, u.last_name AS sender_last_name FROM scheduled_messages sm JOIN messages m ON m.id = sm.message_id AND m.establishment_id = sm.establishment_id LEFT JOIN users u ON u.id = m.sender_id AND u.establishment_id = sm.establishment_id WHERE sm.establishment_id = ?`;
+  const messageParams: any[] = [establishmentId];
+  if (status) { messagesSql += ' AND sm.status = ?'; messageParams.push(status); }
+  messagesSql += ' ORDER BY sm.scheduled_for DESC LIMIT ? OFFSET ?';
+  messageParams.push(limit, offset);
+  const [messages] = await pool.query<RowDataPacket[]>(messagesSql, messageParams);
+
   return { data: await enrichScheduledRows(messages, establishmentId), total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 

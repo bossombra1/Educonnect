@@ -14,16 +14,8 @@ export async function list(req: Request, res: Response): Promise<void> {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const status = req.query.status as string | undefined;
     if (status && !VALID_STATUSES.has(status)) { error(res, 'Statut invalide. Valeurs acceptées : pending, processing, sent, failed, cancelled.'); return; }
-    if (status) {
-      const pool = getPool();
-      const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM scheduled_messages WHERE establishment_id = ? AND status = ?', [user.establishmentId, status]);
-      const total = Number(countRows[0]?.total || 0); const offset = (page - 1) * limit;
-      const [rows] = await pool.query<RowDataPacket[]>(`SELECT sm.*, m.title, m.content, m.message_type, m.priority, m.sender_id, u.first_name AS sender_first_name, u.last_name AS sender_last_name FROM scheduled_messages sm JOIN messages m ON m.id = sm.message_id AND m.establishment_id = sm.establishment_id LEFT JOIN users u ON u.id = m.sender_id AND u.establishment_id = sm.establishment_id WHERE sm.establishment_id = ? AND sm.status = ? ORDER BY sm.scheduled_for DESC LIMIT ? OFFSET ?`, [user.establishmentId, status, limit, offset]);
-      paginated(res, { data: rows, total, page, limit, totalPages: Math.ceil(total / limit) });
-    } else {
-      const result = await scheduledMessageService.getScheduledMessages(user.establishmentId, { page, limit });
-      paginated(res, result);
-    }
+    const result = await scheduledMessageService.getScheduledMessages(user.establishmentId, { page, limit, status });
+    paginated(res, result);
   } catch { error(res, 'Erreur lors de la récupération des messages programmés.'); }
 }
 
