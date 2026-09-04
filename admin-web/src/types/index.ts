@@ -15,8 +15,33 @@ export interface Staff extends User { role: 'STAFF'; fonction?: string; departem
 export interface Class { id: string; name: string; level: string; section?: string; capacity: number; studentCount?: number; schoolYear: string; createdAt: string; updatedAt: string; }
 export interface Group { id: string; name: string; type: GroupType; description?: string; filters?: Record<string, string[]>; memberCount: number; createdAt: string; updatedAt: string; }
 export interface MessageAttachment { id: string; filename: string; url: string; mimeType: string; size: number; }
-export interface MessageRecipient { userId: string; user?: User; status: DeliveryStatus; readAt?: string; deliveredAt?: string; }
-export interface Message { id: string; title?: string; content: string; type: MessageType; priority: MessagePriority; senderId: string; sender?: User; recipients: MessageRecipient[]; attachments: MessageAttachment[]; status: MessageStatus; scheduledAt?: string; sentAt?: string; createdAt: string; updatedAt: string; readCount: number; deliveryCount: number; totalRecipients: number; }
+export interface MessageRecipient {
+  id?: string;
+  userId: string;
+  user?: User;
+  status: DeliveryStatus;
+  interactionStatus?: 'pending' | 'delivered' | 'read' | 'acknowledged' | 'failed';
+  firstName?: string;
+  lastName?: string;
+  matricule?: string;
+  phone?: string;
+  role?: string;
+  schoolMatricule?: string;
+  studentStatus?: string;
+  classId?: string;
+  className?: string;
+  level?: string;
+  section?: string;
+  establishmentId?: string;
+  readAt?: string;
+  deliveredAt?: string;
+  acknowledgedAt?: string;
+}
+export interface MessageTargetGroup { id: string; name: string; type?: GroupType | string; }
+export interface MessageTargetClass { id: string; name: string; level?: string; section?: string; }
+export interface Message {
+  id: string; title?: string; content: string; type: MessageType; priority: MessagePriority; senderId: string; sender?: User; recipients: MessageRecipient[]; groups?: MessageTargetGroup[]; classes?: MessageTargetClass[]; attachments: MessageAttachment[]; status: MessageStatus; scheduledAt?: string; sentAt?: string; createdAt: string; updatedAt: string; readCount: number; deliveryCount: number; failedCount?: number; acknowledgedCount?: number; totalRecipients: number;
+}
 export interface MessageRead { messageId: string; userId: string; readAt: string; }
 export interface DashboardStats { totalStudents: number; totalParents: number; totalStaff: number; totalClasses: number; totalMessagesSent: number; readRate: number; scheduledMessages: number; recentMessages: Message[]; messagesPerDay: { date: string; count: number }[]; }
 export interface MessageStats { totalSent: number; totalRead: number; readRate: number; byDay: { date: string; sent: number; read: number }[]; byType: { type: string; count: number }[]; unreadMessages: Message[]; }
