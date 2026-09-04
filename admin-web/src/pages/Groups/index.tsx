@@ -57,7 +57,7 @@ export default function GroupsPage() {
 
       <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title={detail ? `Détails — ${detail.name}` : 'Détails du groupe'} size="xl">
         {detailLoading && <div className="space-y-4 py-6"><div className="h-5 w-48 animate-pulse rounded bg-slate-200" /><div className="h-20 animate-pulse rounded bg-slate-100" /><div className="h-40 animate-pulse rounded bg-slate-100" /></div>}
-        {!detailLoading && detailError && <div className="rounded-lg border border-red-200 bg-red-50 p-4"><p className="font-medium text-red-800">Impossible de charger le groupe</p><p className="mt-1 text-sm text-red-700">{detailError}</p><div className="mt-3"><Button variant="secondary" onClick={() => loadMembers(detail.id, membersPage)}><RotateCcw className="h-4 w-4" /> Réessayer</Button></div></div>}
+        {!detailLoading && detailError && <div className="rounded-lg border border-red-200 bg-red-50 p-4"><p className="font-medium text-red-800">Impossible de charger le groupe</p><p className="mt-1 text-sm text-red-700">{detailError}</p><div className="mt-3"><Button variant="secondary" onClick={() => detail && loadMembers(detail.id, membersPage)}><RotateCcw className="h-4 w-4" /> Réessayer</Button></div></div>}
         {!detailLoading && !detailError && detail && <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border border-line p-3"><p className="text-xs text-muted">Type</p><div className="mt-1"><Badge variant={typeBadge[detail.type]}>{typeLabels[detail.type]}</Badge></div></div>
