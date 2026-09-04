@@ -40,7 +40,7 @@ export interface MessageRecipient {
 export interface MessageTargetGroup { id: string; name: string; type?: GroupType | string; }
 export interface MessageTargetClass { id: string; name: string; level?: string; section?: string; }
 export interface Message {
-  id: string; title?: string; content: string; type: MessageType; priority: MessagePriority; senderId: string; sender?: User; recipients: MessageRecipient[]; groups?: MessageTargetGroup[]; classes?: MessageTargetClass[]; attachments: MessageAttachment[]; status: MessageStatus; scheduledAt?: string; sentAt?: string; createdAt: string; updatedAt: string; readCount: number; deliveryCount: number; failedCount?: number; acknowledgedCount?: number; totalRecipients: number;
+  id: string; title?: string; content: string; type: MessageType; priority: MessagePriority; senderId: string; sender?: User; recipients: MessageRecipient[]; groups?: MessageTargetGroup[]; classes?: MessageTargetClass[]; attachments: MessageAttachment[]; status: MessageStatus; scheduledAt?: string; sentAt?: string; createdAt: string; updatedAt: string; readCount: number; deliveryCount: number; failedCount?: number; acknowledgedCount?: number; totalRecipients: number; establishmentName?: string;
 }
 export interface MessageRead { messageId: string; userId: string; readAt: string; }
 export interface DashboardStats { totalStudents: number; totalParents: number; totalStaff: number; totalClasses: number; totalMessagesSent: number; readRate: number; scheduledMessages: number; recentMessages: Message[]; messagesPerDay: { date: string; count: number }[]; }
