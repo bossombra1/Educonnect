@@ -99,7 +99,7 @@ export async function getGroups(establishmentId: number, options?: PaginationOpt
 
 export async function getGroupById(groupId: number, establishmentId: number): Promise<any> {
   const pool = getPool();
-  const [groups] = await pool.query<RowDataPacket[]>(`SELECT g.*, (SELECT COUNT(*) FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = g.id AND u.establishment_id = g.establishment_id) as member_count FROM \`groups\` g WHERE g.id = ? AND g.establishment_id = ?`, [groupId, establishmentId]);
+  const [groups] = await pool.query<RowDataPacket[]>(`SELECT g.*, e.name as establishment_name, (SELECT COUNT(*) FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = g.id AND u.establishment_id = g.establishment_id) as member_count FROM \`groups\` g JOIN establishments e ON e.id = g.establishment_id WHERE g.id = ? AND g.establishment_id = ?`, [groupId, establishmentId]);
   return groups.length > 0 ? groups[0] : null;
 }
 
@@ -151,8 +151,8 @@ export async function deleteGroup(groupId: number, establishmentId: number): Pro
 export async function getGroupMembers(groupId: number, establishmentId: number, options?: PaginationOptions): Promise<PaginationResult> {
   const pool = getPool();
   const page = Math.max(1, options?.page || 1); const limit = Math.min(100, Math.max(1, options?.limit || 50)); const offset = (page - 1) * limit;
-  const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) as total FROM group_members gm JOIN `groups` g ON g.id = gm.group_id WHERE gm.group_id = ? AND g.establishment_id = ?', [groupId, establishmentId]);
+  const [countRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) as total FROM group_members gm JOIN `groups` g ON g.id = gm.group_id JOIN users u ON u.id = gm.user_id WHERE gm.group_id = ? AND g.establishment_id = ? AND u.establishment_id = g.establishment_id', [groupId, establishmentId]);
   const total = Number(countRows[0].total);
-  const [members] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, r.name as role_name FROM group_members gm JOIN \`groups\` g ON g.id = gm.group_id JOIN users u ON u.id = gm.user_id JOIN roles r ON r.id = u.role_id WHERE gm.group_id = ? AND g.establishment_id = ? AND u.establishment_id = g.establishment_id ORDER BY u.first_name, u.last_name LIMIT ? OFFSET ?`, [groupId, establishmentId, limit, offset]);
+  const [members] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, u.phone, r.name as role_name, s.matricule_scolaire, s.status as student_status, c.id as class_id, c.name as class_name, c.level as class_level, c.section as class_section, e.id as establishment_id, e.name as establishment_name FROM group_members gm JOIN \`groups\` g ON g.id = gm.group_id JOIN users u ON u.id = gm.user_id JOIN roles r ON r.id = u.role_id LEFT JOIN students s ON s.user_id = u.id AND s.establishment_id = g.establishment_id LEFT JOIN classes c ON c.id = s.class_id AND c.establishment_id = g.establishment_id JOIN establishments e ON e.id = g.establishment_id WHERE gm.group_id = ? AND g.establishment_id = ? AND u.establishment_id = g.establishment_id ORDER BY u.first_name, u.last_name LIMIT ? OFFSET ?`, [groupId, establishmentId, limit, offset]);
   return { data: members, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
