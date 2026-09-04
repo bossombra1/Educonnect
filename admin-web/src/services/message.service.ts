@@ -78,7 +78,17 @@ export const messageService = {
     const { data } = await apiClient.post<ApiResponse<{ recipient_count: number; recipient_ids: string[] }>>('/messages/recipients/preview', payload);
     return { recipientCount: Number(data.data?.recipient_count || 0), recipientIds: data.data?.recipient_ids || [] };
   },
-  async sendMessage(formData: FormData): Promise<Message> { const { data } = await apiClient.post<ApiResponse<any>>('/messages', formData, { headers: { 'Content-Type': 'multipart/form-data' } }); return normalizeMessage(data.data); },
+  async sendMessage(formData: FormData): Promise<Message> {
+    const isDraft = formData.get('status') === 'draft';
+    const endpoint = isDraft ? '/messages/drafts' : '/messages';
+    const { data } = await apiClient.post<ApiResponse<any>>(endpoint, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return normalizeMessage(data.data);
+  },
+  async saveDraft(formData: FormData): Promise<Message> {
+    if (formData.get('status') !== 'draft') formData.append('status', 'draft');
+    const { data } = await apiClient.post<ApiResponse<any>>('/messages/drafts', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return normalizeMessage(data.data);
+  },
   async scheduleMessage(formData: FormData): Promise<Message> { const { data } = await apiClient.post<ApiResponse<any>>('/messages/schedule', formData, { headers: { 'Content-Type': 'multipart/form-data' } }); return normalizeMessage(data.data); },
   async getMessageStatistics(id: string): Promise<MessageStats> { const { data } = await apiClient.get<ApiResponse<MessageStats>>(`/messages/${id}/statistics`); return data.data; },
   async getMessageHistory(params: MessageParams = {}): Promise<PaginatedResponse<Message>> {
