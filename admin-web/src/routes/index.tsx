@@ -1,55 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, ProtectedRoute } from '@/hooks/useAuth';
 import AdminLayout from '@/layouts/AdminLayout';
-import Login from '@/pages/Login';
-import Dashboard from '@/pages/Dashboard';
-import UsersPage from '@/pages/Users';
-import StudentsPage from '@/pages/Students';
-import ParentsPage from '@/pages/Parents';
-import StaffPage from '@/pages/Staff';
-import ClassesPage from '@/pages/Classes';
-import GroupsPage from '@/pages/Groups';
-import MessagesPage from '@/pages/Messages';
-import ScheduledMessagesPage from '@/pages/ScheduledMessages';
-import HistoryPage from '@/pages/History';
-import StatisticsPage from '@/pages/Statistics';
-import SettingsPage from '@/pages/Settings';
-import ImportPage from '@/pages/Import';
-import NotificationsPage from '@/pages/Notifications';
-import AcknowledgementsPage from '@/pages/Acknowledgements';
-
-export function AppRoutes() {
-  return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <AdminLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="eleves" element={<StudentsPage />} />
-          <Route path="parents" element={<ParentsPage />} />
-          <Route path="personnel" element={<StaffPage />} />
-          <Route path="utilisateurs" element={<UsersPage />} />
-          <Route path="classes" element={<ClassesPage />} />
-          <Route path="groupes" element={<GroupsPage />} />
-          <Route path="messages" element={<MessagesPage />} />
-          <Route path="programmes" element={<ScheduledMessagesPage />} />
-          <Route path="historique" element={<HistoryPage />} />
-          <Route path="statistiques" element={<StatisticsPage />} />
-          <Route path="parametres" element={<SettingsPage />} />
-          <Route path="import" element={<ImportPage />} />
-          <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="accuses" element={<AcknowledgementsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </AuthProvider>
-  );
-}
+import Login from '@/pages/Login'; import Dashboard from '@/pages/Dashboard'; import UsersPage from '@/pages/Users'; import StudentsPage from '@/pages/Students'; import ParentsPage from '@/pages/Parents'; import StaffPage from '@/pages/Staff'; import ClassesPage from '@/pages/Classes'; import GroupsPage from '@/pages/Groups'; import MessagesPage from '@/pages/Messages'; import ScheduledMessagesPage from '@/pages/ScheduledMessages'; import HistoryPage from '@/pages/History'; import DraftsPage from '@/pages/Drafts'; import StatisticsPage from '@/pages/Statistics'; import SettingsPage from '@/pages/Settings'; import ImportPage from '@/pages/Import'; import NotificationsPage from '@/pages/Notifications'; import AcknowledgementsPage from '@/pages/Acknowledgements';
+export function AppRoutes() { return <AuthProvider><Routes><Route path="/login" element={<Login />} /><Route path="/*" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}><Route index element={<Navigate to="/dashboard" replace />} /><Route path="dashboard" element={<Dashboard />} /><Route path="eleves" element={<StudentsPage />} /><Route path="parents" element={<ParentsPage />} /><Route path="personnel" element={<StaffPage />} /><Route path="utilisateurs" element={<UsersPage />} /><Route path="classes" element={<ClassesPage />} /><Route path="groupes" element={<GroupsPage />} /><Route path="messages" element={<MessagesPage />} /><Route path="brouillons" element={<DraftsPage />} /><Route path="programmes" element={<ScheduledMessagesPage />} /><Route path="historique" element={<HistoryPage />} /><Route path="statistiques" element={<StatisticsPage />} /><Route path="parametres" element={<SettingsPage />} /><Route path="import" element={<ImportPage />} /><Route path="notifications" element={<NotificationsPage />} /><Route path="accuses" element={<AcknowledgementsPage />} /><Route path="*" element={<Navigate to="/" replace />} /></Route></Routes></AuthProvider>; }
