@@ -57,6 +57,7 @@ export default function HistoryPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [detailMsg, setDetailMsg] = useState<Message | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -82,6 +83,7 @@ export default function HistoryPage() {
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
   const showDetail = async (msg: Message) => {
+    setDetailId(msg.id);
     setDetailLoading(true);
     setDetailError(null);
     setDetailMsg(null);
@@ -92,6 +94,20 @@ export default function HistoryPage() {
       console.error('Erreur lors du chargement du détail:', error);
       setDetailError(getDetailError(error));
     } finally { setDetailLoading(false); }
+  };
+
+  const closeDetail = () => {
+    if (!detailLoading) {
+      setDetailMsg(null);
+      setDetailId(null);
+      setDetailError(null);
+    }
+  };
+
+  const retryDetail = () => {
+    if (!detailId) return;
+    const message = messages.find((item) => item.id === detailId);
+    if (message) void showDetail(message);
   };
 
   const clearFilters = () => {
@@ -145,9 +161,9 @@ export default function HistoryPage() {
       <Card className="!p-0 overflow-hidden"><Table columns={columns} data={messages} loading={loading} keyExtractor={(m) => m.id} emptyMessage="Aucun message envoyé" /></Card>
       <div className="flex justify-center"><Pagination page={page} totalPages={totalPages} onPageChange={setPage} /></div>
 
-      <Modal open={!!detailMsg || detailLoading || !!detailError} onClose={() => { if (!detailLoading) { setDetailMsg(null); setDetailError(null); } }} title={detailMsg?.title || 'Détails du message'} size="lg">
+      <Modal open={!!detailId} onClose={closeDetail} title={detailMsg?.title || 'Détails du message'} size="lg">
         {detailLoading ? <div className="py-10 text-center text-xs text-slate-400">Chargement des détails et des destinataires...</div> : detailError ? (
-          <div role="alert" className="space-y-3 rounded-md border border-red-200 bg-red-50 p-4 text-xs text-red-700"><p>{detailError}</p><Button variant="secondary" size="sm" onClick={() => { const original = messages.find((m) => m.id === detailMsg?.id); if (original) showDetail(original); }}>Réessayer</Button></div>
+          <div role="alert" className="space-y-3 rounded-md border border-red-200 bg-red-50 p-4 text-xs text-red-700"><p>{detailError}</p><Button variant="secondary" size="sm" onClick={retryDetail}>Réessayer</Button></div>
         ) : detailMsg ? (
           <div className="space-y-5">
             <div className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-slate-50 p-4 sm:grid-cols-2">
