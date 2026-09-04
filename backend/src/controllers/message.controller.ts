@@ -3,7 +3,7 @@ import * as messageService from '../services/message.service.js';
 import * as scheduledService from '../services/scheduled-message.service.js';
 import * as recipientService from '../services/message-recipient.service.js';
 import * as schedulingService from '../services/message-scheduling.service.js';
-import { getMessageHistoryWithType } from '../services/message-history-filter.service.js';
+import { getMessageHistoryWithType, getMessageHistoryDetail } from '../services/message-history-filter.service.js';
 import { RequestWithUser } from '../types/index.js';
 
 function values(value: unknown): string[] {
@@ -120,6 +120,26 @@ export async function getMessageHistory(req: Request, res: Response): Promise<vo
     const result = await getMessageHistoryWithType(user.establishmentId, filters, { page, limit });
     res.status(200).json({ success: true, data: result.data, pagination: { page: result.page, limit: result.limit, total: result.total, totalPages: result.totalPages } });
   } catch (err) { res.status(500).json({ success: false, error: (err as Error).message }); }
+}
+
+export async function getMessageHistoryDetail(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user as any;
+    const messageId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(messageId) || messageId <= 0) {
+      res.status(400).json({ success: false, error: 'ID de message invalide.' });
+      return;
+    }
+    const detail = await getMessageHistoryDetail(messageId, user.establishmentId);
+    if (!detail) {
+      res.status(404).json({ success: false, error: 'Élément d’historique non trouvé.' });
+      return;
+    }
+    res.status(200).json({ success: true, data: detail });
+  } catch (err) {
+    console.error('[Messages] Erreur détail historique:', err);
+    res.status(500).json({ success: false, error: 'Une erreur interne est survenue lors du chargement de l’historique.' });
+  }
 }
 
 export async function getUnreadCount(req: Request, res: Response): Promise<void> {
