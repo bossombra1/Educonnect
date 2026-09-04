@@ -13,7 +13,13 @@ router.get('/history', authenticate, requireAdmin(), messageController.getMessag
 router.get('/history/:id', authenticate, requireAdmin(), messageController.getMessageHistoryDetail);
 router.get('/unread-count', authenticate, requireMobileUser(), messageController.getUnreadCount);
 router.post('/recipients/preview', authenticate, requireAdmin(), messageRecipientPreviewController.previewRecipients);
+router.get('/drafts', authenticate, requireAdmin(), messageDraftController.listDrafts);
 router.post('/drafts', authenticate, requireAdmin(), uploadMiddleware.array('attachments', 5), messageDraftController.createDraftMessage);
+router.get('/drafts/:id', authenticate, requireAdmin(), messageDraftController.getDraft);
+router.patch('/drafts/:id', authenticate, requireAdmin(), messageDraftController.updateDraft);
+router.delete('/drafts/:id', authenticate, requireAdmin(), messageDraftController.removeDraft);
+router.post('/drafts/:id/send', authenticate, requireAdmin(), messageDraftController.sendDraft);
+router.post('/drafts/:id/schedule', authenticate, requireAdmin(), messageDraftController.scheduleDraft);
 router.get('/:id/recipients', authenticate, requireAdmin(), messageController.getMessageRecipients);
 router.get('/:id/recipient-stats', authenticate, requireAdmin(), messageController.getMessageRecipientStats);
 router.get('/:id', authenticate, messageController.getMessageById);
