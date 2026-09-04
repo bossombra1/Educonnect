@@ -13,10 +13,14 @@ interface ExcelRow {
   'admission_date'?: unknown;
   'E-mail élève': string;
   'Téléphone élève': string;
-  'Nom complet Parent 1': string;
-  'Tél Parent 1': string;
-  'Nom complet Parent 2': string;
-  'Tél Parent 2': string;
+  'Nom complet Parent 1'?: string;
+  'Tél Parent 1'?: string;
+  'Nom complet Parent 2'?: string;
+  'Tél Parent 2'?: string;
+  'Nom complet Père'?: string;
+  'Tél Père'?: string;
+  'Nom complet Mère'?: string;
+  'Tél Mère'?: string;
 }
 
 const DEFAULT_SCHOOL_YEAR = '2025-2026';
@@ -40,6 +44,16 @@ function findHeaderRow(sheet: XLSX.WorkSheet): number {
   }
 
   return headerIndex;
+}
+
+function normalizeParentColumns<T extends Record<string, any>>(row: T): T & Record<string, any> {
+  return {
+    ...row,
+    'Nom complet Parent 1': row['Nom complet Parent 1'] ?? row['Nom complet Père'] ?? '',
+    'Tél Parent 1': row['Tél Parent 1'] ?? row['Tél Père'] ?? '',
+    'Nom complet Parent 2': row['Nom complet Parent 2'] ?? row['Nom complet Mère'] ?? '',
+    'Tél Parent 2': row['Tél Parent 2'] ?? row['Tél Mère'] ?? '',
+  };
 }
 
 function splitFullName(fullName: string): { firstName: string; lastName: string } {
@@ -96,7 +110,7 @@ export function generateStudentsImportTemplate(): Buffer {
 
   const sheet = XLSX.utils.aoa_to_sheet([
     ['Modèle officiel — Import des élèves'],
-    ['Nom', 'Prénom', 'Matricule', 'Classe', 'Date d’admission', 'E-mail élève', 'Téléphone élève', 'Nom complet Parent 1', 'Tél Parent 1', 'Nom complet Parent 2', 'Tél Parent 2'],
+    ['Nom', 'Prénom', 'Matricule', 'Classe', 'Date d’admission', 'E-mail élève', 'Téléphone élève', 'Nom complet Père', 'Tél Père', 'Nom complet Mère', 'Tél Mère'],
     ['YAPO', 'Jean', 'EXEMPLE', '3ème C', '2025-09-01', 'jean.yapo@gmail.com', '0748123456', 'Marie YAPO', '0708123456', 'Jean-Pierre YAPO', '0509123456'],
   ]);
 
@@ -110,15 +124,16 @@ export function generateStudentsImportTemplate(): Buffer {
   for (const address of ['A2', 'B2', 'C2', 'D2']) sheet[address].c = [{ a: 'EduConnect', t: 'Champ obligatoire' }];
   sheet['E2'].c = [{ a: 'EduConnect', t: 'Champ facultatif — date réelle d’admission' }];
   for (const address of ['F2', 'G2']) sheet[address].c = [{ a: 'EduConnect', t: 'Champ facultatif — coordonnées de l’élève' }];
-  for (const address of ['H2', 'I2', 'J2', 'K2']) sheet[address].c = [{ a: 'EduConnect', t: 'Champ facultatif — coordonnées du parent' }];
+  for (const address of ['H2', 'I2']) sheet[address].c = [{ a: 'EduConnect', t: 'Champ facultatif — coordonnées du père' }];
+  for (const address of ['J2', 'K2']) sheet[address].c = [{ a: 'EduConnect', t: 'Champ facultatif — coordonnées de la mère' }];
 
   const instructions = XLSX.utils.aoa_to_sheet([
     ['Instructions d’utilisation'],
     ['Colonnes obligatoires', 'Nom, Prénom, Matricule, Classe'],
-    ['Colonnes facultatives', 'Date d’admission, E-mail élève, Téléphone élève, Nom complet Parent 1, Tél Parent 1, Nom complet Parent 2, Tél Parent 2'],
+    ['Colonnes facultatives', 'Date d’admission, E-mail élève, Téléphone élève, Nom complet Père, Tél Père, Nom complet Mère, Tél Mère'],
     ['Date d’admission', 'Utilisez AAAA-MM-JJ ou JJ-MM-AAAA. Une date Excel classique est également acceptée. Si la colonne est absente ou vide, la base conserve NULL.'],
     ['Ligne d’exemple', 'La ligne contenant le matricule EXEMPLE est ignorée automatiquement par EduConnect.'],
-    ['Parents', 'Si un nom complet parent est fourni, il est enregistré comme nom réel du parent. Les téléphones Parent 1 et Parent 2 restent séparés.'],
+    ['Père et mère', 'Les colonnes Nom complet Père / Tél Père et Nom complet Mère / Tél Mère permettent d’enregistrer les coordonnées réelles. Le système conserve la distinction technique Parent 1 / Parent 2 en interne.'],
     ['Format', 'Conservez les noms exacts des colonnes et renseignez une ligne par élève.'],
   ]);
   instructions['!cols'] = [{ wch: 28 }, { wch: 110 }];
@@ -144,7 +159,8 @@ export async function importStudentsFromExcel(fileBuffer: Buffer, establishmentI
   if (!sheetName) throw new Error('Le fichier Excel ne contient aucune feuille.');
   const sheet = workbook.Sheets[sheetName];
   const headerRow = findHeaderRow(sheet);
-  const rows = XLSX.utils.sheet_to_json<ExcelRow>(sheet, { range: headerRow, defval: '' });
+  const rawRows = XLSX.utils.sheet_to_json<ExcelRow>(sheet, { range: headerRow, defval: '' });
+  const rows = rawRows.map(normalizeParentColumns);
 
   const importRows = rows.filter((row) => String(row.Matricule || '').trim().toUpperCase() !== TEMPLATE_EXAMPLE_MATRICULE);
   result.totalRows = importRows.length;
@@ -257,7 +273,8 @@ export async function previewImport(fileBuffer: Buffer): Promise<{ totalRows: nu
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName!];
   const headerRow = findHeaderRow(sheet);
-  const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { range: headerRow, defval: '' });
+  const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { range: headerRow, defval: '' });
+  const rows = rawRows.map(normalizeParentColumns);
   const filteredRows = rows.filter((row) => String(row.Matricule || '').trim().toUpperCase() !== TEMPLATE_EXAMPLE_MATRICULE);
   return { totalRows: filteredRows.length, columns: rows.length > 0 ? Object.keys(rows[0]) : [], sampleRows: filteredRows.slice(0, 5) };
 }
