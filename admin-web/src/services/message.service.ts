@@ -1,5 +1,5 @@
 import apiClient from './api';
-import type { ApiResponse, PaginatedResponse, Message, CreateMessageForm, MessageStats } from '@/types';
+import type { ApiResponse, PaginatedResponse, Message, MessageAttachment, MessageRecipient, User, MessageStats } from '@/types';
 
 interface MessageParams {
   page?: number;
@@ -11,10 +11,89 @@ interface MessageParams {
   status?: string;
 }
 
+function normalizeAttachment(raw: any): MessageAttachment {
+  return {
+    id: String(raw.id),
+    filename: raw.filename || raw.file_name || '',
+    url: raw.url || raw.file_url || '',
+    mimeType: raw.mimeType || raw.file_type || '',
+    size: Number(raw.size ?? raw.file_size ?? 0),
+  };
+}
+
+function normalizeRecipient(raw: any): MessageRecipient {
+  const user: User | undefined = raw.user || (raw.first_name || raw.last_name || raw.email
+    ? {
+        id: String(raw.userId ?? raw.user_id ?? raw.id),
+        email: raw.email || '',
+        firstName: raw.firstName || raw.first_name || '',
+        lastName: raw.lastName || raw.last_name || '',
+        role: raw.role || 'STAFF',
+        matricule: raw.matricule,
+        isActive: Boolean(raw.isActive ?? raw.is_active ?? true),
+        createdAt: raw.createdAt || raw.created_at || '',
+        updatedAt: raw.updatedAt || raw.updated_at || '',
+      }
+    : undefined);
+
+  return {
+    userId: String(raw.userId ?? raw.user_id ?? raw.id),
+    user,
+    status: raw.status || raw.delivery_status || 'pending',
+    readAt: raw.readAt || raw.read_at || undefined,
+    deliveredAt: raw.deliveredAt || raw.delivered_at || undefined,
+  };
+}
+
+function normalizeMessage(raw: any): Message {
+  const sender = raw.sender || (raw.sender_first_name || raw.sender_last_name
+    ? {
+        id: String(raw.senderId ?? raw.sender_id ?? ''),
+        email: raw.sender_email || '',
+        firstName: raw.senderFirstName || raw.sender_first_name || '',
+        lastName: raw.senderLastName || raw.sender_last_name || '',
+        role: raw.senderRole || 'STAFF',
+        isActive: true,
+        createdAt: '',
+        updatedAt: '',
+      } as User
+    : undefined);
+
+  const attachments = Array.isArray(raw.attachments) ? raw.attachments.map(normalizeAttachment) : [];
+  const recipients = Array.isArray(raw.recipients) ? raw.recipients.map(normalizeRecipient) : [];
+
+  return {
+    id: String(raw.id),
+    title: raw.title || undefined,
+    content: raw.content || '',
+    type: raw.type || raw.message_type || 'text',
+    priority: raw.priority || 'normal',
+    senderId: String(raw.senderId ?? raw.sender_id ?? ''),
+    sender,
+    recipients,
+    attachments,
+    status: raw.status || 'sent',
+    scheduledAt: raw.scheduledAt || raw.scheduled_at || undefined,
+    sentAt: raw.sentAt || raw.sent_at || undefined,
+    createdAt: raw.createdAt || raw.created_at || '',
+    updatedAt: raw.updatedAt || raw.updated_at || '',
+    readCount: Number(raw.readCount ?? raw.read_count ?? 0),
+    deliveryCount: Number(raw.deliveryCount ?? raw.delivery_count ?? raw.recipient_count ?? 0),
+    totalRecipients: Number(raw.totalRecipients ?? raw.total_recipients ?? raw.recipient_count ?? recipients.length ?? 0),
+  };
+}
+
+function normalizeMessagePage(data: PaginatedResponse<any>): PaginatedResponse<Message> {
+  return {
+    ...data,
+    data: (data.data || []).map(normalizeMessage),
+  };
+}
+
 export const messageService = {
   async getMessages(params: MessageParams = {}): Promise<PaginatedResponse<Message>> {
-    const { data } = await apiClient.get<PaginatedResponse<Message>>('/messages', { params });
-    return data;
+    const { data } = await apiClient.get<PaginatedResponse<any>>('/messages', { params });
+    return normalizeMessagePage(data);
   },
 
   async getScheduledMessages(params: Pick<MessageParams, 'page' | 'limit' | 'status'> = {}): Promise<PaginatedResponse<any>> {
@@ -23,22 +102,22 @@ export const messageService = {
   },
 
   async getMessage(id: string): Promise<Message> {
-    const { data } = await apiClient.get<ApiResponse<Message>>(`/messages/${id}`);
-    return data.data;
+    const { data } = await apiClient.get<ApiResponse<any>>(`/messages/${id}`);
+    return normalizeMessage(data.data);
   },
 
   async sendMessage(formData: FormData): Promise<Message> {
-    const { data } = await apiClient.post<ApiResponse<Message>>('/messages', formData, {
+    const { data } = await apiClient.post<ApiResponse<any>>('/messages', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return data.data;
+    return normalizeMessage(data.data);
   },
 
   async scheduleMessage(formData: FormData): Promise<Message> {
-    const { data } = await apiClient.post<ApiResponse<Message>>('/messages/schedule', formData, {
+    const { data } = await apiClient.post<ApiResponse<any>>('/messages/schedule', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return data.data;
+    return normalizeMessage(data.data);
   },
 
   async getMessageStatistics(id: string): Promise<MessageStats> {
@@ -55,8 +134,8 @@ export const messageService = {
     if (params.startDate) historyParams.date_from = params.startDate;
     if (params.endDate) historyParams.date_to = params.endDate;
     if (params.status) historyParams.status = params.status;
-    const { data } = await apiClient.get<PaginatedResponse<Message>>('/messages/history', { params: historyParams });
-    return data;
+    const { data } = await apiClient.get<PaginatedResponse<any>>('/messages/history', { params: historyParams });
+    return normalizeMessagePage(data);
   },
 
   async uploadAttachment(formData: FormData): Promise<{ url: string; filename: string }> {
