@@ -122,7 +122,7 @@ export default function MessagesPage() {
   const handleDraft = async () => { if (!content.trim()) { toast.error('Le contenu est requis pour un brouillon'); return; } try { const fd = buildFormData(); fd.append('status', 'draft'); await messageService.sendMessage(fd); toast.success('Brouillon enregistré'); navigate('/historique'); } catch (error) { console.error('Erreur enregistrement brouillon:', error); toast.error(getApiErrorMessage(error, 'Impossible d’enregistrer le brouillon. Réessayez.')); } };
 
   const roleOptions = [
-    { value: 'STUDENT' as UserRole, label: 'Élèves' }, { value: 'PARENT' as UserRole, label: 'Parents' }, { value: 'TEACHER' as UserRole, label: 'Enseignants' }, { value: 'STAFF' as UserRole, label: 'Personnel' },
+    { value: 'STUDENT' as UserRole, label: 'Élèves' }, { value: 'PARENT' as UserRole, label: 'Parents' }, { value: 'STAFF' as UserRole, label: 'Personnel' },
   ];
   const tabs: { key: RecipientTab; label: string; icon: React.ReactNode }[] = [
     { key: 'groups', label: 'Groupes', icon: <Users className="h-4 w-4" /> }, { key: 'classes', label: 'Classes', icon: <BookOpen className="h-4 w-4" /> }, { key: 'roles', label: 'Rôles', icon: <UserCheck className="h-4 w-4" /> }, { key: 'individuals', label: 'Individuels', icon: <User className="h-4 w-4" /> },
