@@ -3,7 +3,7 @@ import * as messageService from '../services/message.service.js';
 import * as scheduledService from '../services/scheduled-message.service.js';
 import * as recipientService from '../services/message-recipient.service.js';
 import * as schedulingService from '../services/message-scheduling.service.js';
-import { getMessageHistoryWithType, getMessageHistoryDetail } from '../services/message-history-filter.service.js';
+import { getMessageHistoryWithType, getMessageHistoryDetail as getMessageHistoryDetailService } from '../services/message-history-filter.service.js';
 import { RequestWithUser } from '../types/index.js';
 
 function values(value: unknown): string[] {
@@ -130,7 +130,7 @@ export async function getMessageHistoryDetail(req: Request, res: Response): Prom
       res.status(400).json({ success: false, error: 'ID de message invalide.' });
       return;
     }
-    const detail = await getMessageHistoryDetail(messageId, user.establishmentId);
+    const detail = await getMessageHistoryDetailService(messageId, user.establishmentId);
     if (!detail) {
       res.status(404).json({ success: false, error: 'Élément d’historique non trouvé.' });
       return;
