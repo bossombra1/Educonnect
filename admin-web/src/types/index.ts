@@ -7,7 +7,7 @@ export type DeliveryStatus = 'delivered' | 'failed' | 'pending';
 export type GroupType = 'class' | 'level' | 'role' | 'custom' | 'all_school';
 
 export interface User {
-  id: string; email: string; firstName: string; lastName: string; role: UserRole; phone?: string; matricule?: string; classId?: string; className?: string; matriculeScolaire?: string; studentStatus?: string; roleTitle?: string; department?: string; isActive: boolean; createdAt: string; updatedAt: string; lastLogin?: string;
+  id: string; email: string; firstName: string; lastName: string; role: UserRole; phone?: string; matricule?: string; classId?: string; className?: string; matriculeScolaire?: string; studentStatus?: string; admissionDate?: string | null; roleTitle?: string; department?: string; isActive: boolean; createdAt: string; updatedAt: string; lastLogin?: string;
 }
 export interface Student extends User { role: 'STUDENT'; matricule: string; classId: string; parentId?: string; class?: Class; }
 export interface Parent extends User { role: 'PARENT'; children?: Student[]; }
