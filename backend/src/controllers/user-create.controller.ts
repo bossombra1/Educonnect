@@ -15,6 +15,19 @@ async function generateUniqueMatricule(prefix: string): Promise<string> {
 
 function text(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 
+function parseAdmissionDate(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  const date = String(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error('La date d’admission doit être au format AAAA-MM-JJ.');
+  }
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    throw new Error('La date d’admission est invalide.');
+  }
+  return date;
+}
+
 export async function createManagedUser(req: Request, res: Response): Promise<void> {
   try {
     const body = req.body || {};
@@ -27,6 +40,9 @@ export async function createManagedUser(req: Request, res: Response): Promise<vo
     const password = text(body.password);
     const classId = body.class_id ?? body.classId;
     const matriculeScolaire = text(body.matricule_scolaire ?? body.matriculeScolaire);
+    const admissionDate = roleName === 'STUDENT'
+      ? parseAdmissionDate(body.admission_date ?? body.admissionDate)
+      : null;
 
     if (!firstName || !lastName) { res.status(400).json({ success: false, error: 'Le prénom et le nom sont requis.' }); return; }
     if (!['ADMIN', 'PARENT', 'STUDENT', 'STAFF'].includes(roleName)) { res.status(400).json({ success: false, error: 'Rôle de création non supporté.' }); return; }
@@ -64,7 +80,7 @@ export async function createManagedUser(req: Request, res: Response): Promise<vo
       const userId = userResult.insertId;
 
       if (roleName === 'STUDENT') {
-        await conn.query<ResultSetHeader>(`INSERT INTO students (user_id, class_id, establishment_id, matricule_scolaire, status) VALUES (?, ?, ?, ?, 'active')`, [userId, classId, actor.establishmentId, matriculeScolaire || matricule]);
+        await conn.query<ResultSetHeader>(`INSERT INTO students (user_id, class_id, establishment_id, matricule_scolaire, admission_date, status) VALUES (?, ?, ?, ?, ?, 'active')`, [userId, classId, actor.establishmentId, matriculeScolaire || matricule, admissionDate]);
       } else if (roleName === 'PARENT') {
         await conn.query<ResultSetHeader>(`INSERT INTO parents (user_id, establishment_id, profession, is_primary_contact) VALUES (?, ?, ?, ?)`, [userId, actor.establishmentId, text(body.profession) || null, body.is_primary_contact === false ? 0 : 1]);
       } else if (roleName === 'STAFF') {
@@ -74,7 +90,7 @@ export async function createManagedUser(req: Request, res: Response): Promise<vo
       }
 
       await conn.commit();
-      const [created] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, u.email, u.phone, u.is_active, r.name AS role_name, r.label AS role_label, s.matricule_scolaire, s.class_id, c.name AS class_name, st.role_title, st.department, a.role_type, a.can_manage_users, a.can_send_broadcast, a.can_view_audit FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN students s ON s.user_id = u.id AND s.establishment_id = u.establishment_id LEFT JOIN classes c ON c.id = s.class_id AND c.establishment_id = u.establishment_id LEFT JOIN staff st ON st.user_id = u.id AND st.establishment_id = u.establishment_id LEFT JOIN administrators a ON a.user_id = u.id LEFT JOIN parents p ON p.user_id = u.id AND p.establishment_id = u.establishment_id WHERE u.id = ? AND u.establishment_id = ?`, [userId, actor.establishmentId]);
+      const [created] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.first_name, u.last_name, u.matricule, u.email, u.phone, u.is_active, r.name AS role_name, r.label AS role_label, s.matricule_scolaire, s.admission_date, s.class_id, c.name AS class_name, st.role_title, st.department, a.role_type, a.can_manage_users, a.can_send_broadcast, a.can_view_audit FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN students s ON s.user_id = u.id AND s.establishment_id = u.establishment_id LEFT JOIN classes c ON c.id = s.class_id AND c.establishment_id = u.establishment_id LEFT JOIN staff st ON st.user_id = u.id AND st.establishment_id = u.establishment_id LEFT JOIN administrators a ON a.user_id = u.id LEFT JOIN parents p ON p.user_id = u.id AND p.establishment_id = u.establishment_id WHERE u.id = ? AND u.establishment_id = ?`, [userId, actor.establishmentId]);
       res.status(201).json({ success: true, data: created[0], message: 'Utilisateur créé avec succès.' });
     } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
   } catch (err) {
