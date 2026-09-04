@@ -3,6 +3,7 @@ import * as userController from '../controllers/user.controller.js';
 import * as userCreateController from '../controllers/user-create.controller.js';
 import * as userLifecycleController from '../controllers/user-lifecycle.controller.js';
 import { getStudentsByParent, getParentsByStudent, linkParentStudent, unlinkParentStudent, getStudentProfile } from '../controllers/parent-students.controller.js';
+import { updateStudentAdmissionDate } from '../controllers/student-admission.controller.js';
 import { authenticate } from '../middleware/auth.js';
 import { requireAdmin } from '../middleware/rbac.js';
 
@@ -14,13 +15,14 @@ router.get('/search', authenticate, requireAdmin(), userController.searchUsers);
 router.get('/students/list', authenticate, requireAdmin(), userController.getStudents);
 router.get('/students/by-parent/:parentId', authenticate, requireAdmin(), getStudentsByParent);
 router.get('/students/:studentId/profile', authenticate, requireAdmin(), getStudentProfile);
+router.put('/students/:studentId/admission-date', authenticate, requireAdmin(), updateStudentAdmissionDate);
 router.get('/parents/by-student/:studentId', authenticate, requireAdmin(), getParentsByStudent);
 router.post('/parent-student', authenticate, requireAdmin(), linkParentStudent);
 router.delete('/parent-student/:parentId/:studentId', authenticate, requireAdmin(), unlinkParentStudent);
 router.get('/parents/list', authenticate, requireAdmin(), userController.getParents);
 router.get('/staff/list', authenticate, requireAdmin(), userController.getStaff);
 
-// Création des comptes métier : ADMIN, STUDENT et STAFF.
+// Création des comptes métier : ADMIN, PARENT, STUDENT et STAFF.
 // Cette route doit rester avant /:id.
 router.post('/managed', authenticate, requireAdmin(), userCreateController.createManagedUser);
 
