@@ -108,7 +108,7 @@ export async function getMessageHistoryDetail(messageId: number, establishmentId
   );
 
   const [groups] = await pool.query<RowDataPacket[]>(
-    `SELECT DISTINCT g.id, g.name, g.type
+    `SELECT DISTINCT g.id, g.name, g.group_type AS type
      FROM group_members gm
      JOIN \`groups\` g ON g.id = gm.group_id AND g.establishment_id = ?
      JOIN message_recipients mr ON mr.user_id = gm.user_id AND mr.message_id = ?
