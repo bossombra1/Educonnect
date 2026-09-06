@@ -8,7 +8,7 @@ export default {
     userInterfaceStyle: "light",
     newArchEnabled: true,
     scheme: "educonnect",
-    platforms: ["android", "ios"],
+    platforms: ["android", "ios", "web"],
     splash: {
       image: "./assets/splash-icon.png",
       resizeMode: "contain",
