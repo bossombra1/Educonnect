@@ -1,9 +1,11 @@
+export type MobileRole = 'parent' | 'student' | 'staff';
+
 export interface User {
   id: string;
   matricule: string;
   phone: string;
   full_name: string;
-  role: 'parent' | 'student' | 'staff' | 'admin';
+  role: MobileRole | 'admin';
   email?: string;
   avatar_url?: string;
   establishment_id: string;
@@ -80,12 +82,14 @@ export interface PaginatedResponse<T> {
 }
 
 export interface OtpRequest {
+  role: MobileRole;
   phone: string;
   matricule?: string;
   childMatricule?: string;
 }
 
 export interface OtpVerifyRequest {
+  role: MobileRole;
   phone: string;
   code: string;
   matricule?: string;
