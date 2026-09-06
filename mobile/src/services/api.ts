@@ -1,7 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
-import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
+import { getAuthItem, deleteAuthItem } from './auth-storage';
 
 const API_URL = (Constants.expoConfig?.extra?.apiUrl ?? 'http://localhost:3000/api').replace(/\/$/, '');
 
@@ -16,7 +16,7 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    const token = await SecureStore.getItemAsync('auth_token');
+    const token = await getAuthItem('auth_token');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -29,8 +29,9 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     if (error.response?.status === 401) {
-      await SecureStore.deleteItemAsync('auth_token');
-      await SecureStore.deleteItemAsync('auth_user');
+      await deleteAuthItem('auth_token');
+      await deleteAuthItem('auth_user');
+      await deleteAuthItem('auth_role');
       router.replace('/auth/login');
     }
     return Promise.reject(error);
