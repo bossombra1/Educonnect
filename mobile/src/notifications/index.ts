@@ -7,13 +7,14 @@ import { handleNotificationForeground, handleNotificationTap } from './handlers'
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
 });
 
 export async function setupNotifications(): Promise<() => void> {
-  // Demander la permission
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
   if (existingStatus !== 'granted') {
@@ -21,11 +22,8 @@ export async function setupNotifications(): Promise<() => void> {
     finalStatus = status;
   }
 
-  if (finalStatus !== 'granted') {
-    console.warn('Permission de notification non accordée');
-  }
+  if (finalStatus !== 'granted') console.warn('Permission de notification non accordée');
 
-  // Configurer les canaux Android
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('messages', {
       name: 'Messages',
@@ -33,7 +31,6 @@ export async function setupNotifications(): Promise<() => void> {
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#1E40AF',
     });
-
     await Notifications.setNotificationChannelAsync('urgent', {
       name: 'Messages urgents',
       importance: Notifications.AndroidImportance.HIGH,
@@ -42,7 +39,6 @@ export async function setupNotifications(): Promise<() => void> {
     });
   }
 
-  // Obtenir le token FCM
   try {
     const tokenData = await Notifications.getExpoPushTokenAsync();
     const fcmToken = tokenData.data;
@@ -52,17 +48,9 @@ export async function setupNotifications(): Promise<() => void> {
     console.warn('Erreur lors de l\'enregistrement du token FCM:', error);
   }
 
-  // Écouter les notifications reçues en avant-plan
-  const foregroundSubscription = Notifications.addNotificationReceivedListener((notification) => {
-    handleNotificationForeground(notification);
-  });
+  const foregroundSubscription = Notifications.addNotificationReceivedListener((notification) => handleNotificationForeground(notification));
+  const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => handleNotificationTap(response));
 
-  // Écouter les interactions avec les notifications
-  const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-    handleNotificationTap(response);
-  });
-
-  // Fonction de nettoyage
   return () => {
     foregroundSubscription.remove();
     responseSubscription.remove();
