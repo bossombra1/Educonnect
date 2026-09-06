@@ -61,14 +61,14 @@ export default function TabsLayout() {
           name="index"
           options={{
             title: 'Accueil',
-            tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+            tabBarIcon: ({ color, size }) => <Home size={size} color={String(color)} />,
           }}
         />
         <Tabs.Screen
           name="messages"
           options={{
             title: 'Messages',
-            tabBarIcon: ({ color, size }) => <MessageCircle size={size} color={color} />,
+            tabBarIcon: ({ color, size }) => <MessageCircle size={size} color={String(color)} />,
             tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
           }}
         />
@@ -76,14 +76,14 @@ export default function TabsLayout() {
           name="notifications"
           options={{
             title: 'Notifications',
-            tabBarIcon: ({ color, size }) => <Bell size={size} color={color} />,
+            tabBarIcon: ({ color, size }) => <Bell size={size} color={String(color)} />,
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
             title: 'Profil',
-            tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+            tabBarIcon: ({ color, size }) => <User size={size} color={String(color)} />,
           }}
         />
       </Tabs>
