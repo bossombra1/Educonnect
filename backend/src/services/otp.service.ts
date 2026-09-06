@@ -10,7 +10,8 @@ const OTP_TTL_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
 const OTP_RESEND_SECONDS = 60;
 
-type OtpIdentity = { phone: string; matricule?: string; childMatricule?: string };
+type OtpRole = 'PARENT' | 'STUDENT' | 'STAFF';
+type OtpIdentity = { role: OtpRole; phone: string; matricule?: string; childMatricule?: string };
 
 export function generateOtp(): string { return crypto.randomInt(100000, 999999).toString(); }
 function normalizePhone(phone: string): string { const digits = phone.replace(/\D/g, ''); if (digits.startsWith('225') && digits.length === 13) return digits; if (digits.length === 10 && digits.startsWith('0')) return `225${digits}`; if (digits.length === 9) return `2250${digits}`; return digits; }
@@ -18,22 +19,24 @@ function phoneVariants(phone: string): string[] { const normalized = normalizePh
 
 async function findOtpUser(identity: OtpIdentity) {
   const pool = getPool(); const phones = phoneVariants(identity.phone); const placeholders = phones.map(() => '?').join(', ');
-  if (identity.matricule) {
-    const [users] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.matricule, u.phone, u.is_active, u.role_id, u.establishment_id, u.first_name, u.last_name, r.name AS role_name, u.otp_code, u.otp_expires_at, u.otp_attempts, u.otp_requested_at FROM users u JOIN roles r ON r.id = u.role_id WHERE u.matricule = ? AND u.phone IN (${placeholders}) AND u.is_active = 1`, [identity.matricule.trim(), ...phones]);
-    return users;
+  if (identity.role === 'PARENT') {
+    let sql = `SELECT DISTINCT u.id, u.matricule, u.phone, u.is_active, u.role_id, u.establishment_id, u.first_name, u.last_name, r.name AS role_name, u.otp_code, u.otp_expires_at, u.otp_attempts, u.otp_requested_at FROM users u JOIN roles r ON r.id = u.role_id JOIN parents p ON p.user_id = u.id WHERE u.phone IN (${placeholders}) AND u.is_active = 1 AND r.name = 'PARENT'`;
+    const params: unknown[] = [...phones];
+    if (identity.childMatricule) { sql += ` AND EXISTS (SELECT 1 FROM parent_student ps JOIN students s ON s.id = ps.student_id WHERE ps.parent_id = p.id AND s.matricule_scolaire = ?)`; params.push(identity.childMatricule.trim()); }
+    const [users] = await pool.query<RowDataPacket[]>(sql, params); return users;
   }
-  let sql = `SELECT DISTINCT u.id, u.matricule, u.phone, u.is_active, u.role_id, u.establishment_id, u.first_name, u.last_name, r.name AS role_name, u.otp_code, u.otp_expires_at, u.otp_attempts, u.otp_requested_at FROM users u JOIN roles r ON r.id = u.role_id JOIN parents p ON p.user_id = u.id WHERE u.phone IN (${placeholders}) AND u.is_active = 1 AND r.name = 'PARENT'`;
-  const params: unknown[] = [...phones];
-  if (identity.childMatricule) { sql += ` AND EXISTS (SELECT 1 FROM parent_student ps JOIN students s ON s.id = ps.student_id WHERE ps.parent_id = p.id AND s.matricule_scolaire = ?)`; params.push(identity.childMatricule.trim()); }
-  const [users] = await pool.query<RowDataPacket[]>(sql, params); return users;
+
+  if (!identity.matricule) return [];
+  const [users] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.matricule, u.phone, u.is_active, u.role_id, u.establishment_id, u.first_name, u.last_name, r.name AS role_name, u.otp_code, u.otp_expires_at, u.otp_attempts, u.otp_requested_at FROM users u JOIN roles r ON r.id = u.role_id WHERE u.matricule = ? AND u.phone IN (${placeholders}) AND u.is_active = 1 AND r.name = ?`, [identity.matricule.trim(), ...phones, identity.role]);
+  return users;
 }
 
 export async function requestOtp(identity: OtpIdentity): Promise<{ message: string; requiresChildMatricule?: boolean }> {
   const pool = getPool(); const users = await findOtpUser(identity);
-  if (!identity.matricule && users.length > 1 && !identity.childMatricule) return { message: 'Plusieurs comptes parents utilisent ce numéro. Indiquez le matricule scolaire de votre enfant.', requiresChildMatricule: true };
-  if (users.length !== 1) throw new Error('Téléphone, identifiant ou enfant associé non trouvé, ou compte inactif.');
+  if (identity.role === 'PARENT' && users.length > 1 && !identity.childMatricule) return { message: 'Plusieurs comptes parents utilisent ce numéro. Indiquez le matricule scolaire de votre enfant.', requiresChildMatricule: true };
+  if (users.length !== 1) throw new Error('Téléphone, matricule ou enfant associé non trouvé, ou compte inactif.');
   const user = users[0];
-  if (!['PARENT', 'STUDENT', 'STAFF'].includes(user.role_name)) throw new Error('Seuls les parents, élèves et personnel peuvent utiliser la connexion OTP.');
+  if (user.role_name !== identity.role) throw new Error('Le type de compte sélectionné ne correspond pas à ce compte.');
   const now = Date.now();
   if (user.otp_requested_at) { const requestedAt = new Date(user.otp_requested_at).getTime(); if (now - requestedAt < OTP_RESEND_SECONDS * 1000) throw new Error('Veuillez patienter avant de demander un nouveau code.'); }
   const otp = generateOtp(); const otpHash = await bcrypt.hash(otp, 10);
@@ -45,6 +48,7 @@ export async function verifyOtp(identity: OtpIdentity, code: string): Promise<{ 
   const pool = getPool(); const users = await findOtpUser(identity);
   if (users.length !== 1) throw new Error('Compte OTP introuvable. Recommencez la connexion.');
   const user = users[0];
+  if (user.role_name !== identity.role) throw new Error('Le type de compte sélectionné ne correspond pas à ce compte.');
   if (!user.is_active) throw new Error('Compte inactif.');
   if (!user.otp_code || !user.otp_expires_at) throw new Error("Aucun code OTP en attente. Veuillez d'abord demander un code.");
   if (user.otp_attempts >= OTP_MAX_ATTEMPTS) throw new Error('Nombre maximal de tentatives atteint. Demandez un nouveau code.');
