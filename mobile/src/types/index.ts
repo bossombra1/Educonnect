@@ -12,6 +12,7 @@ export interface User {
   establishment_id: string;
   establishment_name?: string;
   created_at: string;
+  children?: Child[];
 }
 
 export interface Student {
