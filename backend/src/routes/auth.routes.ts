@@ -12,12 +12,14 @@ const loginSchema = {
 };
 
 const otpRequestSchema = {
+  role: { type: 'string', required: true, enum: ['PARENT', 'STUDENT', 'STAFF'] },
   phone: { type: 'string', required: true, minLength: 8, maxLength: 30 },
   matricule: { type: 'string', required: false, maxLength: 50 },
   childMatricule: { type: 'string', required: false, maxLength: 50 },
 };
 
 const otpVerifySchema = {
+  role: { type: 'string', required: true, enum: ['PARENT', 'STUDENT', 'STAFF'] },
   phone: { type: 'string', required: true, minLength: 8, maxLength: 30 },
   matricule: { type: 'string', required: false, maxLength: 50 },
   childMatricule: { type: 'string', required: false, maxLength: 50 },
