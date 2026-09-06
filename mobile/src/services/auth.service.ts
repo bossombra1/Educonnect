@@ -1,6 +1,6 @@
 import apiClient from './api';
 import * as SecureStore from 'expo-secure-store';
-import type { User, OtpRequest, OtpVerifyRequest, OtpResponse, ApiResponse } from '@/types';
+import type { User, OtpRequest, OtpVerifyRequest, OtpResponse, ApiResponse, MobileRole } from '@/types';
 
 type BackendUser = {
   id: number | string;
@@ -18,21 +18,28 @@ type BackendUser = {
   children?: Array<Record<string, unknown>>;
 };
 
+const ROLE_MAP: Record<string, User['role']> = {
+  PARENT: 'parent',
+  STUDENT: 'student',
+  STAFF: 'staff',
+  ADMIN: 'admin',
+  SUPER_ADMIN: 'admin',
+};
+
 function normalizeUser(user: BackendUser): User {
   const firstName = user.first_name?.trim() ?? '';
   const lastName = user.last_name?.trim() ?? '';
   const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
   const backendRole = user.role ?? user.role_name ?? '';
-  const roleMap: Record<string, User['role']> = {
-    PARENT: 'parent', STUDENT: 'student', STAFF: 'staff', ADMIN: 'admin', SUPER_ADMIN: 'admin',
-  };
+  const role = ROLE_MAP[backendRole];
+  if (!role) throw new Error('Rôle utilisateur non reconnu.');
 
   return {
     id: String(user.id),
     matricule: user.matricule,
     phone: user.phone ?? '',
     full_name: fullName || user.matricule,
-    role: roleMap[backendRole] ?? 'staff',
+    role,
     ...(user.email ? { email: user.email } : {}),
     ...(user.avatar_url ? { avatar_url: user.avatar_url } : {}),
     establishment_id: user.establishment_id === null ? '' : String(user.establishment_id),
@@ -43,19 +50,20 @@ function normalizeUser(user: BackendUser): User {
 
 class AuthService {
   async requestOtp(request: OtpRequest): Promise<ApiResponse<{ message: string; requiresChildMatricule?: boolean }>> {
-    const { data } = await apiClient.post<ApiResponse<{ message: string; requiresChildMatricule?: boolean }>>(
-      '/auth/otp/request', request,
-    );
+    const { data } = await apiClient.post<ApiResponse<{ message: string; requiresChildMatricule?: boolean }>>('/auth/otp/request', request);
     return data;
   }
 
   async verifyOtp(request: OtpVerifyRequest): Promise<OtpResponse> {
-    const { data } = await apiClient.post<ApiResponse<{ token: string; user: BackendUser }>>(
-      '/auth/otp/verify', request,
-    );
+    const { data } = await apiClient.post<ApiResponse<{ token: string; user: BackendUser }>>('/auth/otp/verify', request);
     const response: OtpResponse = { token: data.data.token, user: normalizeUser(data.data.user) };
+    if (response.user.role !== request.role) {
+      await this.clearSession();
+      throw new Error('Le rôle authentifié ne correspond pas au rôle sélectionné.');
+    }
     await SecureStore.setItemAsync('auth_token', response.token);
     await SecureStore.setItemAsync('auth_user', JSON.stringify(response.user));
+    await SecureStore.setItemAsync('auth_role', response.user.role);
     return response;
   }
 
@@ -63,15 +71,21 @@ class AuthService {
     const { data } = await apiClient.get<ApiResponse<BackendUser>>('/auth/profile');
     const user = normalizeUser(data.data);
     await SecureStore.setItemAsync('auth_user', JSON.stringify(user));
+    await SecureStore.setItemAsync('auth_role', user.role);
     return user;
   }
 
   async logout(): Promise<void> {
     try { await apiClient.post('/auth/logout'); } catch { /* network errors are non-blocking */ }
-    finally {
-      await SecureStore.deleteItemAsync('auth_token');
-      await SecureStore.deleteItemAsync('auth_user');
-    }
+    finally { await this.clearSession(); }
+  }
+
+  async clearSession(): Promise<void> {
+    await Promise.all([
+      SecureStore.deleteItemAsync('auth_token'),
+      SecureStore.deleteItemAsync('auth_user'),
+      SecureStore.deleteItemAsync('auth_role'),
+    ]);
   }
 
   async getStoredUser(): Promise<User | null> {
@@ -79,6 +93,11 @@ class AuthService {
       const raw = await SecureStore.getItemAsync('auth_user');
       return raw ? JSON.parse(raw) as User : null;
     } catch { return null; }
+  }
+
+  async getStoredRole(): Promise<MobileRole | null> {
+    const role = await SecureStore.getItemAsync('auth_role');
+    return role === 'parent' || role === 'student' || role === 'staff' ? role : null;
   }
 
   async getStoredToken(): Promise<string | null> { return SecureStore.getItemAsync('auth_token'); }
