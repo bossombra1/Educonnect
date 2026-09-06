@@ -19,7 +19,7 @@ export default function ProfileScreen() {
       if (stored?.role === 'parent') {
         const profile = await authService.getProfile().catch(() => null);
         if (profile?.role === 'parent') {
-          const rawChildren = (profile.children ?? []) as ProfileChild[];
+          const rawChildren = (profile.children ?? []) as unknown as ProfileChild[];
           setChildren(rawChildren.map((child) => ({
             id: String(child.student_id ?? child.id ?? ''),
             matricule: String(child.matricule_scolaire ?? child.matricule ?? ''),
