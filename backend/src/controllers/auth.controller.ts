@@ -16,8 +16,8 @@ export async function login(req: Request, res: Response): Promise<void> {
 
 export async function requestOtp(req: Request, res: Response): Promise<void> {
   try {
-    const { phone, matricule, childMatricule } = req.body;
-    const result = await otpService.requestOtp({ phone, matricule, childMatricule });
+    const { role, phone, matricule, childMatricule } = req.body;
+    const result = await otpService.requestOtp({ role, phone, matricule, childMatricule });
     res.status(200).json({ success: true, data: result });
   } catch (err) {
     res.status(400).json({ success: false, error: (err as Error).message });
@@ -26,8 +26,8 @@ export async function requestOtp(req: Request, res: Response): Promise<void> {
 
 export async function verifyOtp(req: Request, res: Response): Promise<void> {
   try {
-    const { phone, matricule, childMatricule, code } = req.body;
-    const result = await otpService.verifyOtp({ phone, matricule, childMatricule }, code);
+    const { role, phone, matricule, childMatricule, code } = req.body;
+    const result = await otpService.verifyOtp({ role, phone, matricule, childMatricule }, code);
     res.status(200).json({ success: true, data: result });
   } catch (err) {
     res.status(400).json({ success: false, error: (err as Error).message });
