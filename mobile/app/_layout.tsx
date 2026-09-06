@@ -17,41 +17,43 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        const authenticated = await authService.isAuthenticated();
-        setInitialRoute(authenticated ? '/(tabs)' : '/auth/login');
+        const token = await authService.getStoredToken();
+        if (!token) {
+          setInitialRoute('/auth/login');
+          return;
+        }
+        try {
+          const profile = await authService.getProfile();
+          setInitialRoute(profile.role === 'parent' || profile.role === 'student' || profile.role === 'staff' ? '/(tabs)' : '/auth/login');
+        } catch {
+          await authService.clearSession();
+          setInitialRoute('/auth/login');
+        }
       } catch {
         setInitialRoute('/auth/login');
       } finally {
         setIsReady(true);
       }
     }
-    prepare();
+    void prepare();
   }, []);
 
   useEffect(() => {
-    if (isReady) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
+    if (isReady) void SplashScreen.hideAsync().catch(() => {});
   }, [isReady]);
 
   useEffect(() => {
-    if (isReady) {
-      router.replace(initialRoute);
-    }
+    if (isReady) router.replace(initialRoute);
   }, [isReady, initialRoute]);
 
   if (!isReady) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
+    return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={Colors.primary} /></View>;
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar style="light" backgroundColor={Colors.primary} />
+        <StatusBar style="light" />
         <Slot />
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -59,10 +61,5 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  loadingContainer: { flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' },
 });
