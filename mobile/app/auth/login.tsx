@@ -10,7 +10,7 @@ import type { OtpRequest, MobileRole } from '@/types';
 type LoginRole = MobileRole;
 
 const ROLE_LABELS: Record<LoginRole, string> = { parent: 'Parent', student: 'Élève', staff: 'Personnel' };
-const BACKEND_ROLES: Record<LoginRole, OtpRequest['role']> = { parent: 'parent', student: 'student', staff: 'staff' };
+const BACKEND_ROLES: Record<LoginRole, OtpRequest['role']> = { parent: 'PARENT', student: 'STUDENT', staff: 'STAFF' };
 
 export default function LoginScreen() {
   const [role, setRole] = useState<LoginRole>('parent');
@@ -38,11 +38,7 @@ export default function LoginScreen() {
     if (role !== 'parent' && !cleanMatricule) { setError('Veuillez saisir votre matricule de compte.'); return; }
     if (role === 'parent' && requiresChildMatricule && !cleanChild) { setError('Saisissez le matricule scolaire de votre enfant.'); return; }
 
-    const request: OtpRequest = {
-      role: BACKEND_ROLES[role], phone: cleanPhone,
-      ...(role !== 'parent' ? { matricule: cleanMatricule } : {}),
-      ...(role === 'parent' && cleanChild ? { childMatricule: cleanChild } : {}),
-    };
+    const request: OtpRequest = { role: BACKEND_ROLES[role], phone: cleanPhone, ...(role !== 'parent' ? { matricule: cleanMatricule } : {}), ...(role === 'parent' && cleanChild ? { childMatricule: cleanChild } : {}) };
     setLoading(true);
     try {
       const response = await authService.requestOtp(request);
