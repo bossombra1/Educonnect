@@ -1,4 +1,5 @@
 export type MobileRole = 'parent' | 'student' | 'staff';
+export type BackendMobileRole = 'PARENT' | 'STUDENT' | 'STAFF';
 
 export interface User {
   id: string;
@@ -82,14 +83,14 @@ export interface PaginatedResponse<T> {
 }
 
 export interface OtpRequest {
-  role: MobileRole;
+  role: BackendMobileRole;
   phone: string;
   matricule?: string;
   childMatricule?: string;
 }
 
 export interface OtpVerifyRequest {
-  role: MobileRole;
+  role: BackendMobileRole;
   phone: string;
   code: string;
   matricule?: string;
