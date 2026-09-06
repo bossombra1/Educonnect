@@ -1,5 +1,9 @@
 import apiClient from './api';
-import * as SecureStore from 'expo-secure-store';
+import {
+  getAuthItem,
+  setAuthItem,
+  deleteAuthItem,
+} from './auth-storage';
 import type { User, Child, OtpRequest, OtpVerifyRequest, OtpResponse, ApiResponse, MobileRole } from '@/types';
 
 type BackendUser = {
@@ -86,17 +90,17 @@ class AuthService {
       await this.clearSession();
       throw new Error('Le rôle authentifié ne correspond pas au rôle sélectionné.');
     }
-    await SecureStore.setItemAsync('auth_token', response.token);
-    await SecureStore.setItemAsync('auth_user', JSON.stringify(response.user));
-    await SecureStore.setItemAsync('auth_role', response.user.role);
+    await setAuthItem('auth_token', response.token);
+    await setAuthItem('auth_user', JSON.stringify(response.user));
+    await setAuthItem('auth_role', response.user.role);
     return response;
   }
 
   async getProfile(): Promise<User> {
     const { data } = await apiClient.get<ApiResponse<BackendUser>>('/auth/profile');
     const user = normalizeUser(data.data);
-    await SecureStore.setItemAsync('auth_user', JSON.stringify(user));
-    await SecureStore.setItemAsync('auth_role', user.role);
+    await setAuthItem('auth_user', JSON.stringify(user));
+    await setAuthItem('auth_role', user.role);
     return user;
   }
 
@@ -107,26 +111,31 @@ class AuthService {
 
   async clearSession(): Promise<void> {
     await Promise.all([
-      SecureStore.deleteItemAsync('auth_token'),
-      SecureStore.deleteItemAsync('auth_user'),
-      SecureStore.deleteItemAsync('auth_role'),
+      deleteAuthItem('auth_token'),
+      deleteAuthItem('auth_user'),
+      deleteAuthItem('auth_role'),
     ]);
   }
 
   async getStoredUser(): Promise<User | null> {
     try {
-      const raw = await SecureStore.getItemAsync('auth_user');
+      const raw = await getAuthItem('auth_user');
       return raw ? JSON.parse(raw) as User : null;
     } catch { return null; }
   }
 
   async getStoredRole(): Promise<MobileRole | null> {
-    const role = await SecureStore.getItemAsync('auth_role');
+    const role = await getAuthItem('auth_role');
     return role === 'parent' || role === 'student' || role === 'staff' ? role : null;
   }
 
-  async getStoredToken(): Promise<string | null> { return SecureStore.getItemAsync('auth_token'); }
-  async isAuthenticated(): Promise<boolean> { return !!(await this.getStoredToken()); }
+  async getStoredToken(): Promise<string | null> {
+    return getAuthItem('auth_token');
+  }
+
+  async isAuthenticated(): Promise<boolean> {
+    return !!(await this.getStoredToken());
+  }
 }
 
 export const authService = new AuthService();
