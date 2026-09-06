@@ -6,6 +6,8 @@ import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '@/theme';
 import authService from '@/services/auth.service';
 import type { User, Child } from '@/types';
 
+type ProfileChild = Record<string, unknown>;
+
 export default function ProfileScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [children, setChildren] = useState<Child[]>([]);
@@ -17,7 +19,7 @@ export default function ProfileScreen() {
       if (stored?.role === 'parent') {
         const profile = await authService.getProfile().catch(() => null);
         if (profile?.role === 'parent') {
-          const rawChildren = (profile as User & { children?: Array<Record<string, unknown>> }).children ?? [];
+          const rawChildren = (profile.children ?? []) as ProfileChild[];
           setChildren(rawChildren.map((child) => ({
             id: String(child.student_id ?? child.id ?? ''),
             matricule: String(child.matricule_scolaire ?? child.matricule ?? ''),
