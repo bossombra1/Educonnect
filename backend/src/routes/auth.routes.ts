@@ -11,6 +11,12 @@ const loginSchema = {
   password: { type: 'string', required: true, minLength: 1 },
 };
 
+const mobileLoginSchema = {
+  role: { type: 'string', required: true, enum: ['PARENT', 'STUDENT', 'STAFF'] },
+  identifier: { type: 'string', required: true, minLength: 3, maxLength: 100 },
+  password: { type: 'string', required: true, minLength: 1 },
+};
+
 const otpRequestSchema = {
   role: { type: 'string', required: true, enum: ['PARENT', 'STUDENT', 'STAFF'] },
   phone: { type: 'string', required: true, minLength: 8, maxLength: 30 },
@@ -27,6 +33,7 @@ const otpVerifySchema = {
 };
 
 router.post('/login', validateBody(loginSchema), authController.login);
+router.post('/mobile-login', validateBody(mobileLoginSchema), authController.mobileLogin);
 router.post('/otp/request', otpRequestRateLimit, validateBody(otpRequestSchema), authController.requestOtp);
 router.post('/otp/verify', otpVerifyRateLimit, validateBody(otpVerifySchema), authController.verifyOtp);
 router.post('/logout', authenticate, authController.logout);
