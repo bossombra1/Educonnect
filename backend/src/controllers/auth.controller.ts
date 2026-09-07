@@ -14,6 +14,18 @@ export async function login(req: Request, res: Response): Promise<void> {
   }
 }
 
+export async function mobileLogin(req: Request, res: Response): Promise<void> {
+  try {
+    const { role, identifier, password } = req.body;
+    const result = await authService.loginMobile(role, identifier, password);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const message = (err as Error).message;
+    const status = message.includes('Première connexion') ? 403 : 401;
+    res.status(status).json({ success: false, error: message });
+  }
+}
+
 export async function requestOtp(req: Request, res: Response): Promise<void> {
   try {
     const { role, phone, matricule, childMatricule } = req.body;
