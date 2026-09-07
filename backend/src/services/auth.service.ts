@@ -113,7 +113,19 @@ async function issueTokenAndAudit(user: RowDataPacket, action: string): Promise<
     [user.id, action, 'USER']
   );
 
-  const userData = {
+  const userData: {
+    id: number;
+    email: string | null;
+    first_name: string;
+    last_name: string;
+    matricule: string | null;
+    phone: string | null;
+    avatar_url: string | null;
+    role: string;
+    establishment_id: number;
+    establishment_name: string | null;
+    children?: RowDataPacket[];
+  } = {
     id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name,
     matricule: user.matricule, phone: user.phone, avatar_url: user.avatar_url, role: user.role_name,
     establishment_id: user.establishment_id, establishment_name: user.establishment_name,
