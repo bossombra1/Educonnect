@@ -5,6 +5,7 @@ export type AuthStackParamList = {
   Otp: {
     phone: string;
     role: 'parent' | 'student' | 'staff';
+    firstConnection?: boolean;
     matricule?: string;
     childMatricule?: string;
   };
