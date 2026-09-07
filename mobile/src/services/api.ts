@@ -1,9 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import Constants from 'expo-constants';
-import { router } from 'expo-router';
 import { getAuthItem, deleteAuthItem } from './auth-storage';
-
-const API_URL = (Constants.expoConfig?.extra?.apiUrl ?? 'http://localhost:3000/api').replace(/\/$/, '');
+import { API_URL } from '@/config/env';
+import { resetToAuth } from '@/navigation/NavigationRef';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -32,7 +30,7 @@ apiClient.interceptors.response.use(
       await deleteAuthItem('auth_token');
       await deleteAuthItem('auth_user');
       await deleteAuthItem('auth_role');
-      router.replace('/auth/login');
+      resetToAuth();
     }
     return Promise.reject(error);
   }
