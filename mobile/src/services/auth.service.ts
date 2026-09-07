@@ -22,6 +22,10 @@ type BackendUser = {
   children?: Array<Record<string, unknown>>;
 };
 
+type MobileLoginResponse =
+  | { otpRequired: true; role: BackendMobileRole; phone: string; matricule: string | null; message: string }
+  | { otpRequired: false; token: string; user: BackendUser };
+
 const ROLE_MAP: Record<string, User['role']> = {
   PARENT: 'parent',
   STUDENT: 'student',
@@ -94,13 +98,18 @@ class AuthService {
     return response;
   }
 
-  async loginWithPassword(role: MobileRole, identifier: string, password: string): Promise<OtpResponse> {
+  async loginWithPassword(role: MobileRole, identifier: string, password: string): Promise<MobileLoginResponse> {
     const backendRole = (Object.entries(MOBILE_ROLE_MAP).find(([, value]) => value === role)?.[0] ?? 'PARENT') as BackendMobileRole;
-    const { data } = await apiClient.post<ApiResponse<{ token: string; user: BackendUser }>>('/auth/mobile-login', {
+    const { data } = await apiClient.post<ApiResponse<MobileLoginResponse>>('/auth/mobile-login', {
       role: backendRole,
       identifier: identifier.trim(),
       password,
     });
+
+    if (data.data.otpRequired) {
+      return data.data;
+    }
+
     const response: OtpResponse = { token: data.data.token, user: normalizeUser(data.data.user) };
     if (response.user.role !== role) {
       await this.clearSession();
