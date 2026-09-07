@@ -1,35 +1,23 @@
-import { Platform } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as Keychain from 'react-native-keychain';
 
-const isWeb = Platform.OS === 'web';
+const SERVICE_NAME = 'com.educonnect.mobile.auth';
 
 export async function getAuthItem(key: string): Promise<string | null> {
-  if (isWeb) {
-    if (typeof window === 'undefined') return null;
-    return window.localStorage.getItem(key);
+  try {
+    const credentials = await Keychain.getGenericPassword({ service: `${SERVICE_NAME}.${key}` });
+    return credentials ? credentials.password : null;
+  } catch {
+    return null;
   }
-
-  return SecureStore.getItemAsync(key);
 }
 
 export async function setAuthItem(key: string, value: string): Promise<void> {
-  if (isWeb) {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(key, value);
-    }
-    return;
-  }
-
-  await SecureStore.setItemAsync(key, value);
+  await Keychain.setGenericPassword(key, value, {
+    service: `${SERVICE_NAME}.${key}`,
+    accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
 }
 
 export async function deleteAuthItem(key: string): Promise<void> {
-  if (isWeb) {
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(key);
-    }
-    return;
-  }
-
-  await SecureStore.deleteItemAsync(key);
+  await Keychain.resetGenericPassword({ service: `${SERVICE_NAME}.${key}` });
 }
