@@ -7,6 +7,7 @@ import { Colors, Spacing, FontSize, BorderRadius } from '@/theme';
 import authService from '@/services/auth.service';
 import type { MobileRole } from '@/types';
 import type { AuthStackParamList } from '@/navigation/types';
+import { resetToApp } from '@/navigation/NavigationRef';
 
 type Navigation = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 const ROLE_LABELS: Record<MobileRole, string> = { parent: 'Parent', student: 'Élève', staff: 'Personnel' };
@@ -41,6 +42,8 @@ export default function LoginScreen() {
           role,
           ...(result.matricule ? { matricule: result.matricule } : {}),
         });
+      } else {
+        resetToApp();
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Identifiant ou mot de passe incorrect.');
@@ -87,29 +90,5 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  inner: { flex: 1, justifyContent: 'center', paddingHorizontal: Spacing['2xl'], paddingVertical: Spacing['2xl'] },
-  logoContainer: { alignItems: 'center', marginBottom: Spacing['2xl'] },
-  logo: { width: 68, height: 68, borderRadius: 34, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
-  logoText: { color: Colors.white, fontSize: FontSize['2xl'], fontWeight: '800' },
-  appName: { marginTop: Spacing.md, fontSize: FontSize['2xl'], fontWeight: '700', color: Colors.primary },
-  subtitle: { marginTop: 2, color: Colors.gray500, fontSize: FontSize.sm },
-  card: { backgroundColor: Colors.white, borderRadius: BorderRadius.xl, padding: Spacing['2xl'] },
-  title: { fontSize: FontSize['2xl'], fontWeight: '700', color: Colors.gray900 },
-  description: { marginTop: Spacing.xs, marginBottom: Spacing.lg, color: Colors.gray500, fontSize: FontSize.sm },
-  roleRow: { flexDirection: 'row', gap: Spacing.xs, marginBottom: Spacing.lg },
-  roleButton: { flex: 1, minHeight: 44, borderWidth: 1, borderColor: Colors.gray200, borderRadius: BorderRadius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs },
-  roleActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  roleText: { color: Colors.gray600, fontSize: FontSize.xs, fontWeight: '600' },
-  roleTextActive: { color: Colors.white },
-  error: { backgroundColor: '#FEF2F2', borderLeftWidth: 3, borderLeftColor: Colors.danger, padding: Spacing.md, borderRadius: BorderRadius.sm, marginBottom: Spacing.md },
-  errorText: { color: Colors.danger, fontSize: FontSize.sm },
-  label: { color: Colors.gray700, fontSize: FontSize.sm, fontWeight: '600', marginBottom: Spacing.xs, marginTop: Spacing.sm },
-  input: { borderWidth: 1, borderColor: Colors.gray200, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, color: Colors.gray900, fontSize: FontSize.md, backgroundColor: Colors.white },
-  button: { marginTop: Spacing.lg, minHeight: 52, borderRadius: BorderRadius.md, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: Spacing.sm },
-  disabled: { opacity: 0.6 },
-  buttonText: { color: Colors.white, fontSize: FontSize.md, fontWeight: '700' },
-  hint: { marginTop: Spacing.lg, textAlign: 'center', color: Colors.gray400, fontSize: FontSize.xs, lineHeight: 18 },
-  security: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs, marginTop: Spacing.lg },
-  securityText: { color: Colors.gray400, fontSize: FontSize.xs },
+  container: { flex: 1, backgroundColor: Colors.background }, inner: { flex: 1, justifyContent: 'center', paddingHorizontal: Spacing['2xl'], paddingVertical: Spacing['2xl'] }, logoContainer: { alignItems: 'center', marginBottom: Spacing['2xl'] }, logo: { width: 68, height: 68, borderRadius: 34, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' }, logoText: { color: Colors.white, fontSize: FontSize['2xl'], fontWeight: '800' }, appName: { marginTop: Spacing.md, fontSize: FontSize['2xl'], fontWeight: '700', color: Colors.primary }, subtitle: { marginTop: 2, color: Colors.gray500, fontSize: FontSize.sm }, card: { backgroundColor: Colors.white, borderRadius: BorderRadius.xl, padding: Spacing['2xl'] }, title: { fontSize: FontSize['2xl'], fontWeight: '700', color: Colors.gray900 }, description: { marginTop: Spacing.xs, marginBottom: Spacing.lg, color: Colors.gray500, fontSize: FontSize.sm }, roleRow: { flexDirection: 'row', gap: Spacing.xs, marginBottom: Spacing.lg }, roleButton: { flex: 1, minHeight: 44, borderWidth: 1, borderColor: Colors.gray200, borderRadius: BorderRadius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs }, roleActive: { backgroundColor: Colors.primary, borderColor: Colors.primary }, roleText: { color: Colors.gray600, fontSize: FontSize.xs, fontWeight: '600' }, roleTextActive: { color: Colors.white }, error: { backgroundColor: '#FEF2F2', borderLeftWidth: 3, borderLeftColor: Colors.danger, padding: Spacing.md, borderRadius: BorderRadius.sm, marginBottom: Spacing.md }, errorText: { color: Colors.danger, fontSize: FontSize.sm }, label: { color: Colors.gray700, fontSize: FontSize.sm, fontWeight: '600', marginBottom: Spacing.xs, marginTop: Spacing.sm }, input: { borderWidth: 1, borderColor: Colors.gray200, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, color: Colors.gray900, fontSize: FontSize.md, backgroundColor: Colors.white }, button: { marginTop: Spacing.lg, minHeight: 52, borderRadius: BorderRadius.md, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: Spacing.sm }, disabled: { opacity: 0.6 }, buttonText: { color: Colors.white, fontSize: FontSize.md, fontWeight: '700' }, hint: { marginTop: Spacing.lg, textAlign: 'center', color: Colors.gray400, fontSize: FontSize.xs, lineHeight: 18 }, security: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs, marginTop: Spacing.lg }, securityText: { color: Colors.gray400, fontSize: FontSize.xs },
 });
