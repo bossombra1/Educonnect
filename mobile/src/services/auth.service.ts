@@ -24,7 +24,7 @@ type BackendUser = {
 
 type MobileLoginResponse =
   | { otpRequired: true; role: BackendMobileRole; phone: string; matricule: string | null; message: string }
-  | { otpRequired: false; token: string; user: BackendUser };
+  | ({ otpRequired: false } & OtpResponse);
 
 const ROLE_MAP: Record<string, User['role']> = {
   PARENT: 'parent',
@@ -110,13 +110,13 @@ class AuthService {
       return data.data;
     }
 
-    const response: OtpResponse = { token: data.data.token, user: normalizeUser(data.data.user) };
+    const response: OtpResponse = { token: data.data.token, user: data.data.user };
     if (response.user.role !== role) {
       await this.clearSession();
       throw new Error('Le rôle authentifié ne correspond pas au rôle sélectionné.');
     }
     await this.storeSession(response);
-    return response;
+    return { otpRequired: false, ...response };
   }
 
   private async storeSession(response: OtpResponse): Promise<void> {
