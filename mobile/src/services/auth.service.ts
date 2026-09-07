@@ -4,7 +4,7 @@ import {
   setAuthItem,
   deleteAuthItem,
 } from './auth-storage';
-import type { User, Child, OtpRequest, OtpVerifyRequest, OtpResponse, ApiResponse, MobileRole } from '@/types';
+import type { User, Child, OtpRequest, OtpVerifyRequest, OtpResponse, ApiResponse, MobileRole, BackendMobileRole } from '@/types';
 
 type BackendUser = {
   id: number | string;
@@ -30,7 +30,7 @@ const ROLE_MAP: Record<string, User['role']> = {
   SUPER_ADMIN: 'admin',
 };
 
-const MOBILE_ROLE_MAP: Record<'PARENT' | 'STUDENT' | 'STAFF', MobileRole> = {
+const MOBILE_ROLE_MAP: Record<BackendMobileRole, MobileRole> = {
   PARENT: 'parent',
   STUDENT: 'student',
   STAFF: 'staff',
@@ -90,10 +90,30 @@ class AuthService {
       await this.clearSession();
       throw new Error('Le rôle authentifié ne correspond pas au rôle sélectionné.');
     }
+    await this.storeSession(response);
+    return response;
+  }
+
+  async loginWithPassword(role: MobileRole, identifier: string, password: string): Promise<OtpResponse> {
+    const backendRole = (Object.entries(MOBILE_ROLE_MAP).find(([, value]) => value === role)?.[0] ?? 'PARENT') as BackendMobileRole;
+    const { data } = await apiClient.post<ApiResponse<{ token: string; user: BackendUser }>>('/auth/mobile-login', {
+      role: backendRole,
+      identifier: identifier.trim(),
+      password,
+    });
+    const response: OtpResponse = { token: data.data.token, user: normalizeUser(data.data.user) };
+    if (response.user.role !== role) {
+      await this.clearSession();
+      throw new Error('Le rôle authentifié ne correspond pas au rôle sélectionné.');
+    }
+    await this.storeSession(response);
+    return response;
+  }
+
+  private async storeSession(response: OtpResponse): Promise<void> {
     await setAuthItem('auth_token', response.token);
     await setAuthItem('auth_user', JSON.stringify(response.user));
     await setAuthItem('auth_role', response.user.role);
-    return response;
   }
 
   async getProfile(): Promise<User> {
