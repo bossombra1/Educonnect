@@ -4,9 +4,14 @@ import { getPool } from '../config/database.js';
 import { env } from '../config/env.js';
 import { RowDataPacket } from 'mysql2/promise';
 import { JwtPayload } from '../types/index.js';
+import { requestOtp } from './otp.service.js';
 
 const MOBILE_ROLES = ['PARENT', 'STUDENT', 'STAFF'] as const;
 type MobileRole = (typeof MOBILE_ROLES)[number];
+
+type MobileLoginResult =
+  | { otpRequired: true; role: MobileRole; phone: string; matricule: string | null; message: string }
+  | { otpRequired: false; token: string; user: any };
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -57,7 +62,7 @@ export async function loginMobile(
   role: MobileRole,
   identifier: string,
   password: string
-): Promise<{ token: string; user: any }> {
+): Promise<MobileLoginResult> {
   const pool = getPool();
   const cleanIdentifier = identifier.trim();
   if (!cleanIdentifier) throw new Error('Identifiant requis.');
@@ -65,6 +70,8 @@ export async function loginMobile(
 
   const phones = phoneVariants(cleanIdentifier);
   const placeholders = phones.map(() => '?').join(', ');
+  const identityClause = role === 'PARENT' ? `u.phone IN (${placeholders})` : 'u.matricule = ?';
+  const identityParams = role === 'PARENT' ? phones : [cleanIdentifier];
 
   const [users] = await pool.query<RowDataPacket[]>(
     `SELECT u.id, u.establishment_id, u.role_id, r.name as role_name,
@@ -76,22 +83,41 @@ export async function loginMobile(
      LEFT JOIN establishments e ON e.id = u.establishment_id
      WHERE u.is_active = 1
        AND r.name = ?
-       AND (u.matricule = ? OR u.phone IN (${placeholders}))
+       AND ${identityClause}
      LIMIT 2`,
-    [role, cleanIdentifier, ...phones]
+    [role, ...identityParams]
   );
 
   if (users.length !== 1) throw new Error('Identifiant ou mot de passe incorrect.');
   const user = users[0];
 
-  if (!user.otp_verified) {
-    throw new Error('Première connexion requise : validez d’abord votre compte avec le code reçu par SMS.');
-  }
-
   const isPasswordValid = await bcrypt.compare(password, user.password_hash);
   if (!isPasswordValid) throw new Error('Identifiant ou mot de passe incorrect.');
 
-  return issueTokenAndAudit(user, 'LOGIN_PASSWORD');
+  if (!user.otp_verified) {
+    if (!user.phone) throw new Error('Aucun numéro de téléphone n’est associé à ce compte. Contactez l’établissement.');
+
+    const otpResult = await requestOtp({
+      role,
+      phone: user.phone,
+      ...(role !== 'PARENT' && user.matricule ? { matricule: user.matricule } : {}),
+    });
+
+    if (otpResult.requiresChildMatricule) {
+      throw new Error('Plusieurs comptes parents utilisent ce numéro. Contactez l’établissement pour identifier votre compte.');
+    }
+
+    return {
+      otpRequired: true,
+      role,
+      phone: user.phone,
+      matricule: user.matricule ?? null,
+      message: otpResult.message,
+    };
+  }
+
+  const result = await issueTokenAndAudit(user, 'LOGIN_PASSWORD');
+  return { otpRequired: false, ...result };
 }
 
 async function issueTokenAndAudit(user: RowDataPacket, action: string): Promise<{ token: string; user: any }> {
