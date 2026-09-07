@@ -20,14 +20,14 @@ function phoneVariants(phone: string): string[] { const normalized = normalizePh
 async function findOtpUser(identity: OtpIdentity) {
   const pool = getPool(); const phones = phoneVariants(identity.phone); const placeholders = phones.map(() => '?').join(', ');
   if (identity.role === 'PARENT') {
-    let sql = `SELECT DISTINCT u.id, u.matricule, u.phone, u.is_active, u.role_id, u.establishment_id, u.first_name, u.last_name, r.name AS role_name, u.otp_code, u.otp_expires_at, u.otp_attempts, u.otp_requested_at FROM users u JOIN roles r ON r.id = u.role_id JOIN parents p ON p.user_id = u.id WHERE u.phone IN (${placeholders}) AND u.is_active = 1 AND r.name = 'PARENT'`;
+    let sql = `SELECT DISTINCT u.id, u.matricule, u.phone, u.is_active, u.role_id, u.establishment_id, u.first_name, u.last_name, r.name AS role_name, u.otp_code, u.otp_expires_at, u.otp_attempts, u.otp_requested_at, u.otp_verified FROM users u JOIN roles r ON r.id = u.role_id JOIN parents p ON p.user_id = u.id WHERE u.phone IN (${placeholders}) AND u.is_active = 1 AND r.name = 'PARENT'`;
     const params: unknown[] = [...phones];
     if (identity.childMatricule) { sql += ` AND EXISTS (SELECT 1 FROM parent_student ps JOIN students s ON s.id = ps.student_id WHERE ps.parent_id = p.id AND s.matricule_scolaire = ?)`; params.push(identity.childMatricule.trim()); }
     const [users] = await pool.query<RowDataPacket[]>(sql, params); return users;
   }
 
   if (!identity.matricule) return [];
-  const [users] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.matricule, u.phone, u.is_active, u.role_id, u.establishment_id, u.first_name, u.last_name, r.name AS role_name, u.otp_code, u.otp_expires_at, u.otp_attempts, u.otp_requested_at FROM users u JOIN roles r ON r.id = u.role_id WHERE u.matricule = ? AND u.phone IN (${placeholders}) AND u.is_active = 1 AND r.name = ?`, [identity.matricule.trim(), ...phones, identity.role]);
+  const [users] = await pool.query<RowDataPacket[]>(`SELECT u.id, u.matricule, u.phone, u.is_active, u.role_id, u.establishment_id, u.first_name, u.last_name, r.name AS role_name, u.otp_code, u.otp_expires_at, u.otp_attempts, u.otp_requested_at, u.otp_verified FROM users u JOIN roles r ON r.id = u.role_id WHERE u.matricule = ? AND u.phone IN (${placeholders}) AND u.is_active = 1 AND r.name = ?`, [identity.matricule.trim(), ...phones, identity.role]);
   return users;
 }
 
@@ -37,6 +37,7 @@ export async function requestOtp(identity: OtpIdentity): Promise<{ message: stri
   if (users.length !== 1) throw new Error('Téléphone, matricule ou enfant associé non trouvé, ou compte inactif.');
   const user = users[0];
   if (user.role_name !== identity.role) throw new Error('Le type de compte sélectionné ne correspond pas à ce compte.');
+  if (user.otp_verified) throw new Error('Ce compte a déjà été activé. Utilisez votre identifiant et votre mot de passe pour vous connecter.');
   const now = Date.now();
   if (user.otp_requested_at) { const requestedAt = new Date(user.otp_requested_at).getTime(); if (now - requestedAt < OTP_RESEND_SECONDS * 1000) throw new Error('Veuillez patienter avant de demander un nouveau code.'); }
   const otp = generateOtp(); const otpHash = await bcrypt.hash(otp, 10);
@@ -50,6 +51,7 @@ export async function verifyOtp(identity: OtpIdentity, code: string): Promise<{ 
   const user = users[0];
   if (user.role_name !== identity.role) throw new Error('Le type de compte sélectionné ne correspond pas à ce compte.');
   if (!user.is_active) throw new Error('Compte inactif.');
+  if (user.otp_verified) throw new Error('Ce compte est déjà activé. Utilisez votre identifiant et votre mot de passe.');
   if (!user.otp_code || !user.otp_expires_at) throw new Error("Aucun code OTP en attente. Veuillez d'abord demander un code.");
   if (user.otp_attempts >= OTP_MAX_ATTEMPTS) throw new Error('Nombre maximal de tentatives atteint. Demandez un nouveau code.');
   if (new Date() > new Date(user.otp_expires_at)) { await pool.query('UPDATE users SET otp_code = NULL, otp_expires_at = NULL, otp_attempts = 0, otp_requested_at = NULL, otp_verified = FALSE WHERE id = ?', [user.id]); throw new Error('Le code OTP a expiré. Veuillez demander un nouveau code.'); }
