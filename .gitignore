@@ -43,3 +43,18 @@ npm-debug.log*
 # Misc
 .cache/
 .temp/
+
+# Android / Gradle
+.gradle/
+**/.gradle/
+local.properties
+*.hprof
+
+# Android build
+**/build/
+*.apk
+*.aab
+
+# Metro / React Native logs
+metro_log.txt
+metro_err.txt
