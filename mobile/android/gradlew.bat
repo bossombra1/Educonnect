@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "GRADLE_VERSION=9.3.1"
+set "GRADLE_VERSION=8.13"
 set "GRADLE_BASE=%USERPROFILE%\.gradle\educonnect-gradle"
 set "GRADLE_HOME=%GRADLE_BASE%\gradle-%GRADLE_VERSION%"
 set "GRADLE_ZIP=%TEMP%\educonnect-gradle-%GRADLE_VERSION%-bin.zip"

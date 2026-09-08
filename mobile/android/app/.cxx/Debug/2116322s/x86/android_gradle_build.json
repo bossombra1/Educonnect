@@ -1,0 +1,92 @@
+{
+  "buildFiles": [
+    "D:\\EduConnect\\mobile\\node_modules\\@react-native-async-storage\\async-storage\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "D:\\EduConnect\\mobile\\node_modules\\@react-native-community\\netinfo\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "D:\\EduConnect\\mobile\\node_modules\\react-native-gesture-handler\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "D:\\EduConnect\\mobile\\node_modules\\react-native-keychain\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "D:\\EduConnect\\mobile\\node_modules\\react-native-safe-area-context\\android\\src\\main\\jni\\CMakeLists.txt",
+    "D:\\EduConnect\\mobile\\node_modules\\react-native-screens\\android\\src\\main\\jni\\CMakeLists.txt",
+    "D:\\EduConnect\\mobile\\node_modules\\react-native\\ReactAndroid\\cmake-utils\\default-app-setup\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "D:\\Android\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "D:\\EduConnect\\mobile\\android\\app\\.cxx\\Debug\\2116322s\\x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "D:\\Android\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "D:\\EduConnect\\mobile\\android\\app\\.cxx\\Debug\\2116322s\\x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "appmodules::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "appmodules",
+      "output": "D:\\EduConnect\\mobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2116322s\\obj\\x86\\libappmodules.so",
+      "runtimeFiles": [
+        "D:\\EduConnect\\mobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2116322s\\obj\\x86\\libreact_codegen_safeareacontext.so",
+        "D:\\EduConnect\\mobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2116322s\\obj\\x86\\libreact_codegen_rnscreens.so",
+        "C:\\Users\\regis\\.gradle\\caches\\9.3.1\\transforms\\f3bb8c0980a8632bf0fb9e09ca917a5e\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.x86\\libfbjni.so",
+        "C:\\Users\\regis\\.gradle\\caches\\9.3.1\\transforms\\d9fd0ca120272666cd00f8fc06e4d628\\workspace\\transformed\\react-android-0.86.3-debug\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so",
+        "C:\\Users\\regis\\.gradle\\caches\\9.3.1\\transforms\\d9fd0ca120272666cd00f8fc06e4d628\\workspace\\transformed\\react-android-0.86.3-debug\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so"
+      ]
+    },
+    "react_codegen_RNCNetInfoSpec::@c36c96bfd5b5770618a5": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_RNCNetInfoSpec"
+    },
+    "react_codegen_RNKeychainSpec::@f9a2cb36ebca2de4baf9": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_RNKeychainSpec"
+    },
+    "react_codegen_rnasyncstorage::@1596841e19ec5b9eeffe": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_rnasyncstorage"
+    },
+    "react_codegen_rngesturehandler_codegen::@39f233abcd2c728bc6ec": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_rngesturehandler_codegen"
+    },
+    "react_codegen_rnscreens::@25bcbd507e98d3a854ad": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_rnscreens",
+      "output": "D:\\EduConnect\\mobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2116322s\\obj\\x86\\libreact_codegen_rnscreens.so",
+      "runtimeFiles": [
+        "C:\\Users\\regis\\.gradle\\caches\\9.3.1\\transforms\\d9fd0ca120272666cd00f8fc06e4d628\\workspace\\transformed\\react-android-0.86.3-debug\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so",
+        "C:\\Users\\regis\\.gradle\\caches\\9.3.1\\transforms\\d9fd0ca120272666cd00f8fc06e4d628\\workspace\\transformed\\react-android-0.86.3-debug\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so",
+        "C:\\Users\\regis\\.gradle\\caches\\9.3.1\\transforms\\f3bb8c0980a8632bf0fb9e09ca917a5e\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.x86\\libfbjni.so"
+      ]
+    },
+    "react_codegen_safeareacontext::@7984cd80db47aa7b952a": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_safeareacontext",
+      "output": "D:\\EduConnect\\mobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2116322s\\obj\\x86\\libreact_codegen_safeareacontext.so",
+      "runtimeFiles": [
+        "C:\\Users\\regis\\.gradle\\caches\\9.3.1\\transforms\\f3bb8c0980a8632bf0fb9e09ca917a5e\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.x86\\libfbjni.so",
+        "C:\\Users\\regis\\.gradle\\caches\\9.3.1\\transforms\\d9fd0ca120272666cd00f8fc06e4d628\\workspace\\transformed\\react-android-0.86.3-debug\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so",
+        "C:\\Users\\regis\\.gradle\\caches\\9.3.1\\transforms\\d9fd0ca120272666cd00f8fc06e4d628\\workspace\\transformed\\react-android-0.86.3-debug\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so"
+      ]
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "D:\\Android\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe",
+      "cppCompilerExecutable": "D:\\Android\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

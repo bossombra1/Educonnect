@@ -1,0 +1,4 @@
+D:/EduConnect/mobile/android/app/.cxx/Debug/2116322s/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/foo.dir
+D:/EduConnect/mobile/android/app/.cxx/Debug/2116322s/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/boo.dir
+D:/EduConnect/mobile/android/app/.cxx/Debug/2116322s/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/edit_cache.dir
+D:/EduConnect/mobile/android/app/.cxx/Debug/2116322s/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/rebuild_cache.dir
