@@ -1,1 +1,0 @@
-# EduConnect release ProGuard rules.

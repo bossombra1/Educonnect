@@ -6,7 +6,7 @@ EduConnect est une plateforme complète de communication entre les établissemen
 
 | Fonctionnalité | Description |
 |---|---|
-| **Authentification OTP mobile** | Parents : téléphone enregistré ; élèves/personnel : matricule de compte + téléphone, puis code OTP |
+| **Authentification web** | Parents : téléphone + mot de passe ; élèves/personnel : matricule ou email + mot de passe |
 | **Notifications push** | Notifications instantanées via Firebase Cloud Messaging (FCM) |
 | **Mode hors ligne** | Consultation des messages en mode déconnecté avec synchronisation automatique |
 | **Panneau d'administration** | Interface web complète pour gérer l'établissement |
@@ -34,7 +34,7 @@ EduConnect/
 │   │   └── server.ts       # Point d'entrée du serveur
 │   └── package.json
 ├── admin-web/              # Interface d'administration (React + Vite + Tailwind)
-├── mobile/                 # Application mobile (React Native + Expo)
+├── client-web/             # Espace web responsive parents, élèves et personnel
 ├── database/
 │   ├── educonnect.sql      # Structure de la base de données
 │   └── seed.sql            # Données de test
@@ -48,7 +48,7 @@ EduConnect/
 | **Base de données** | MySQL 8.0 (via WAMPServer) |
 | **Backend** | Node.js 18+, Express, TypeScript (ESM), mysql2, JWT, bcrypt, node-cron, multer, xlsx, firebase-admin |
 | **Admin Web** | React 18, Vite, TypeScript, Tailwind CSS, React Router, Recharts, lucide-react, Zustand |
-| **Application mobile** | React Native, Expo, Expo Router, TypeScript, expo-notifications, Firebase FCM, AsyncStorage |
+| **Client Web** | React 18, Vite, TypeScript, Tailwind CSS, lucide-react |
 | **Notifications push** | Firebase Cloud Messaging (FCM) |
 
 ## Prérequis
@@ -56,7 +56,6 @@ EduConnect/
 - **Node.js 18+**
 - **npm** (inclus avec Node.js) ou **yarn**
 - **WAMPServer** avec MySQL
-- **Android Studio** (pour la compilation APK) ou **Expo Go** (pour le développement)
 - **Git** (optionnel)
 
 ## Démarrage rapide
@@ -92,13 +91,15 @@ npm run dev
 
 L'interface utilise `/api` et le proxy Vite vers le backend local.
 
-### Étape 4 — Application mobile
+### Étape 4 — Espace utilisateurs web
 
 ```bash
-cd mobile
+cd client-web
 npm install
-npx expo start
+npm run dev
 ```
+
+L'espace utilisateurs est disponible sur `http://localhost:5174`. Il reçoit les messages, notifications, pièces jointes et demandes d'émargement envoyés depuis l'interface d'administration.
 
 - Android Emulator : `EXPO_PUBLIC_API_URL=http://10.0.2.2:3000/api`
 - Téléphone physique sur le même Wi-Fi : utilisez l'IPv4 LAN du PC, par exemple `http://192.168.1.20:3000/api`.
@@ -177,15 +178,10 @@ Les comptes de test sont créés par `database/seed.sql`.
 - Vérifiez Node.js 18+.
 - Réinstallez les dépendances avec `npm install` si nécessaire.
 
-### Le code OTP n'arrive pas
-
-Le backend ne doit pas prétendre qu'un SMS a été envoyé tant qu'un fournisseur SMS réel n'est pas configuré. Vérifiez la configuration et l'intégration du fournisseur SMS avant les tests de production.
-
 ### Notifications push
 
-- Vérifiez `google-services.json` dans `mobile/`.
 - Vérifiez les clés Firebase dans `backend/.env`.
-- Vérifiez les permissions de notification sur l'appareil.
+- Le client web recharge les notifications via `/api/notifications`.
 
 ### Erreur de CORS dans le navigateur
 

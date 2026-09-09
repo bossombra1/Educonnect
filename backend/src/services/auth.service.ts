@@ -4,14 +4,12 @@ import { getPool } from '../config/database.js';
 import { env } from '../config/env.js';
 import { RowDataPacket } from 'mysql2/promise';
 import { JwtPayload } from '../types/index.js';
-import { requestOtp } from './otp.service.js';
 
 const MOBILE_ROLES = ['PARENT', 'STUDENT', 'STAFF'] as const;
 type MobileRole = (typeof MOBILE_ROLES)[number];
 
 type MobileLoginResult =
-  | { otpRequired: true; role: MobileRole; phone: string; matricule: string | null; message: string }
-  | { otpRequired: false; token: string; user: any };
+  { token: string; user: any };
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -70,13 +68,15 @@ export async function loginMobile(
 
   const phones = phoneVariants(cleanIdentifier);
   const placeholders = phones.map(() => '?').join(', ');
-  const identityClause = role === 'PARENT' ? `u.phone IN (${placeholders})` : 'u.matricule = ?';
-  const identityParams = role === 'PARENT' ? phones : [cleanIdentifier];
+  const identityClause = role === 'PARENT'
+    ? `(u.phone IN (${placeholders}) OR REGEXP_REPLACE(u.phone, '[^0-9]', '') = ?)`
+    : '(u.matricule = ? OR LOWER(u.email) = LOWER(?))';
+  const identityParams = role === 'PARENT' ? [...phones, normalizePhone(cleanIdentifier)] : [cleanIdentifier, cleanIdentifier];
 
   const [users] = await pool.query<RowDataPacket[]>(
     `SELECT u.id, u.establishment_id, u.role_id, r.name as role_name,
             u.first_name, u.last_name, u.matricule, u.email, u.phone, u.avatar_url,
-            u.is_active, u.password_hash, u.otp_verified,
+            u.is_active, u.password_hash,
             e.name as establishment_name
      FROM users u
      JOIN roles r ON u.role_id = r.id
@@ -94,30 +94,47 @@ export async function loginMobile(
   const isPasswordValid = await bcrypt.compare(password, user.password_hash);
   if (!isPasswordValid) throw new Error('Identifiant ou mot de passe incorrect.');
 
-  if (!user.otp_verified) {
-    if (!user.phone) throw new Error('Aucun numéro de téléphone n’est associé à ce compte. Contactez l’établissement.');
+  return issueTokenAndAudit(user, 'LOGIN_PASSWORD');
+}
 
-    const otpResult = await requestOtp({
-      role,
-      phone: user.phone,
-      ...(role !== 'PARENT' && user.matricule ? { matricule: user.matricule } : {}),
-    });
-
-    if (otpResult.requiresChildMatricule) {
-      throw new Error('Plusieurs comptes parents utilisent ce numéro. Contactez l’établissement pour identifier votre compte.');
-    }
-
-    return {
-      otpRequired: true,
-      role,
-      phone: user.phone,
-      matricule: user.matricule ?? null,
-      message: otpResult.message,
-    };
+export async function updateProfile(
+  userId: number,
+  currentPassword: string,
+  updates: { password?: string; phone?: string; email?: string },
+): Promise<any> {
+  const pool = getPool();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT u.id, u.password_hash, u.phone, u.email, r.name AS role_name
+     FROM users u JOIN roles r ON r.id = u.role_id
+     WHERE u.id = ? AND u.is_active = 1`,
+    [userId],
+  );
+  if (rows.length !== 1) throw new Error('Utilisateur non trouvé.');
+  if (!currentPassword || !(await bcrypt.compare(currentPassword, rows[0].password_hash))) {
+    throw new Error('Le mot de passe actuel est incorrect.');
   }
-
-  const result = await issueTokenAndAudit(user, 'LOGIN_PASSWORD');
-  return { otpRequired: false, ...result };
+  if (!updates.password && updates.phone === undefined && updates.email === undefined) {
+    throw new Error('Aucune modification à enregistrer.');
+  }
+  if (updates.password !== undefined && updates.password.length < 8) {
+    throw new Error('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+  }
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (updates.password) { fields.push('password_hash = ?'); values.push(await bcrypt.hash(updates.password, 10)); }
+  if (rows[0].role_name === 'PARENT' && updates.phone !== undefined) {
+    const phone = updates.phone.trim();
+    if (phone.length < 8) throw new Error('Le numéro de téléphone est invalide.');
+    fields.push('phone = ?', 'phone_hash = SHA2(?, 256)'); values.push(phone, phone);
+  }
+  if (['STUDENT', 'STAFF'].includes(rows[0].role_name) && updates.email !== undefined) {
+    const email = updates.email.trim().toLowerCase();
+    if (!email.includes('@')) throw new Error('L’adresse email est invalide.');
+    fields.push('email = ?'); values.push(email);
+  }
+  if (!fields.length) throw new Error('Aucune modification autorisée pour ce type de compte.');
+  await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, [...values, userId]);
+  return getProfile(userId);
 }
 
 async function issueTokenAndAudit(user: RowDataPacket, action: string): Promise<{ token: string; user: any }> {
