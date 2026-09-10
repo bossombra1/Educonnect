@@ -143,15 +143,16 @@ Les comptes de test sont créés par `database/seed.sql`.
 
 | Variable | Description | Valeur par défaut |
 |---|---|---|
-| `PORT` | Port du serveur backend | `3000` |
+| `API_PORT` | Port du serveur backend | `3000` |
 | `NODE_ENV` | Environnement d'exécution | `development` |
-| `DB_HOST` | Hôte MySQL | `localhost` |
-| `DB_PORT` | Port MySQL | `3306` |
-| `DB_USER` | Utilisateur MySQL | `root` |
-| `DB_PASSWORD` | Mot de passe MySQL | *(vide avec WAMP)* |
-| `DB_NAME` | Nom de la base de données | `educonnect` |
+| `MYSQL_HOST` | Hôte MySQL | `localhost` |
+| `MYSQL_PORT` | Port MySQL | `3306` |
+| `MYSQL_USER` | Utilisateur MySQL | `root` en développement uniquement |
+| `MYSQL_PASSWORD` | Mot de passe MySQL | *(à définir en production)* |
+| `MYSQL_DATABASE` | Nom de la base de données | `educonnect` |
 | `JWT_SECRET` | Clé secrète JWT | *(à générer)* |
 | `JWT_EXPIRES_IN` | Durée de vie JWT | `24h` |
+| `CORS_ORIGINS` | Origines web autorisées, séparées par des virgules | `http://localhost:5173,http://localhost:5174` |
 | `FIREBASE_PROJECT_ID` | Identifiant Firebase | — |
 | `FIREBASE_PRIVATE_KEY` | Clé privée Firebase | — |
 | `FIREBASE_CLIENT_EMAIL` | Compte de service Firebase | — |
@@ -171,7 +172,7 @@ Les comptes de test sont créés par `database/seed.sql`.
 ### Erreur `ECONNREFUSED` lors de la connexion à MySQL
 
 - Vérifiez que WAMPServer est démarré.
-- Vérifiez `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` et `DB_NAME` dans `backend/.env`.
+- Vérifiez `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD` et `MYSQL_DATABASE` dans `backend/.env`.
 
 ### Erreur `npm install`
 
@@ -185,7 +186,7 @@ Les comptes de test sont créés par `database/seed.sql`.
 
 ### Erreur de CORS dans le navigateur
 
-- L'API configure CORS.
+- L'API autorise uniquement les origines présentes dans `CORS_ORIGINS`.
 - L'Admin Web utilise `/api` avec le proxy Vite.
 - Vérifiez que le backend est bien démarré sur le port 3000.
 

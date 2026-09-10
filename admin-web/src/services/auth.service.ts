@@ -45,13 +45,13 @@ export const authService = {
       user: normalizeUser(data.data.user),
     };
 
-    localStorage.setItem('token', response.token);
+    sessionStorage.setItem('token', response.token);
     localStorage.setItem('user', JSON.stringify(response.user));
     return response;
   },
 
   logout() {
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     localStorage.removeItem('user');
     window.location.href = '/login';
   },

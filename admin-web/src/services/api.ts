@@ -8,8 +8,22 @@ const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+export async function downloadProtectedFile(url: string, filename: string): Promise<void> {
+  const token = sessionStorage.getItem('token');
+  const response = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!response.ok) throw new Error('Impossible de télécharger la pièce jointe.');
+  const objectUrl = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -36,7 +50,7 @@ apiClient.interceptors.response.use(
     }
 
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
     }

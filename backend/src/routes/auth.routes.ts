@@ -2,7 +2,7 @@ import { Router } from 'express';
 import * as authController from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validator.js';
-import { otpRequestRateLimit, otpVerifyRateLimit } from '../middleware/otpRateLimit.js';
+import { loginRateLimit, otpRequestRateLimit, otpVerifyRateLimit } from '../middleware/otpRateLimit.js';
 
 const router = Router();
 
@@ -32,8 +32,8 @@ const otpVerifySchema = {
   code: { type: 'string', required: true, pattern: /^[0-9]{6}$/ },
 };
 
-router.post('/login', validateBody(loginSchema), authController.login);
-router.post('/mobile-login', validateBody(mobileLoginSchema), authController.mobileLogin);
+router.post('/login', loginRateLimit, validateBody(loginSchema), authController.login);
+router.post('/mobile-login', loginRateLimit, validateBody(mobileLoginSchema), authController.mobileLogin);
 router.post('/otp/request', otpRequestRateLimit, validateBody(otpRequestSchema), authController.requestOtp);
 router.post('/otp/verify', otpVerifyRateLimit, validateBody(otpVerifySchema), authController.verifyOtp);
 router.post('/logout', authenticate, authController.logout);

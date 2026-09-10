@@ -26,18 +26,22 @@ export async function sendNotificationToUsers(userIds: number[], title: string, 
   const pool = getPool();
   const uniqueUserIds = [...new Set(userIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
   if (uniqueUserIds.length === 0) return 0;
-  const placeholders = uniqueUserIds.map(() => '(?, ?, ?, ?, ?, ?, NOW())').join(',');
-  const params: any[] = [];
-  for (const userId of uniqueUserIds) params.push(userId, messageId || null, title, body, data ? JSON.stringify(data) : null, 'pending');
-  await pool.query(`INSERT INTO notifications (user_id, message_id, title, body, data, fcm_status, sent_at) VALUES ${placeholders}`, params);
-  const result = await sendBulkPushNotificationsDetailed(uniqueUserIds, title, body, data);
+  const notificationIds: number[] = [];
+  for (const userId of uniqueUserIds) {
+    const [inserted] = await pool.query<ResultSetHeader>(
+      `INSERT INTO notifications (user_id, message_id, title, body, data, fcm_status, sent_at) VALUES (?, ?, ?, ?, ?, 'pending', NOW())`,
+      [userId, messageId || null, title, body, data ? JSON.stringify(data) : null],
+    );
+    notificationIds.push(inserted.insertId);
+  }
+  const result = await sendBulkPushNotificationsDetailed(uniqueUserIds, title, body, data, notificationIds);
   return result.successCount;
 }
 
 export async function sendSingleNotification(userId: number, title: string, body: string, messageId?: number, data?: Record<string, string>): Promise<boolean> {
   const pool = getPool();
-  await pool.query<ResultSetHeader>(`INSERT INTO notifications (user_id, message_id, title, body, data, fcm_status, sent_at) VALUES (?, ?, ?, ?, ?, 'pending', NOW())`, [userId, messageId || null, title, body, data ? JSON.stringify(data) : null]);
-  return sendPushNotification(userId, title, body, data);
+  const [inserted] = await pool.query<ResultSetHeader>(`INSERT INTO notifications (user_id, message_id, title, body, data, fcm_status, sent_at) VALUES (?, ?, ?, ?, ?, 'pending', NOW())`, [userId, messageId || null, title, body, data ? JSON.stringify(data) : null]);
+  return sendPushNotification(userId, title, body, data, inserted.insertId);
 }
 
 export async function getUnreadMessageCount(userId: number): Promise<number> {

@@ -18,7 +18,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [token, setToken] = useState<string | null>(sessionStorage.getItem('token'));
   const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = !!token && !!user;
@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(JSON.parse(stored));
         } catch {
           localStorage.removeItem('user');
-          localStorage.removeItem('token');
+          sessionStorage.removeItem('token');
           setToken(null);
         }
       }
@@ -43,12 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await authService.login(email, password);
     setToken(response.token);
     setUser(response.user);
-    localStorage.setItem('token', response.token);
+    sessionStorage.setItem('token', response.token);
     localStorage.setItem('user', JSON.stringify(response.user));
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     localStorage.removeItem('user');
     setToken(null);
     setUser(null);

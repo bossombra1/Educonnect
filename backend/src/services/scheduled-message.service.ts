@@ -16,7 +16,12 @@ export async function processScheduledMessages(): Promise<{ processed: number; f
   const [due] = await pool.query<RowDataPacket[]>(`SELECT sm.*, m.title, m.content, m.message_type, m.priority, m.establishment_id FROM scheduled_messages sm JOIN messages m ON m.id = sm.message_id WHERE sm.status = 'pending' AND sm.scheduled_for <= NOW() AND sm.retry_count < 3 AND sm.establishment_id = m.establishment_id LIMIT 50`);
   let processed = 0; let failed = 0;
   for (const scheduled of due) {
-    await pool.query(`UPDATE scheduled_messages SET status = 'processing', last_attempt_at = NOW() WHERE id = ? AND establishment_id = ?`, [scheduled.id, scheduled.establishment_id]);
+    const [claimed] = await pool.query<ResultSetHeader>(
+      `UPDATE scheduled_messages SET status = 'processing', last_attempt_at = NOW()
+       WHERE id = ? AND establishment_id = ? AND status = 'pending' AND retry_count < 3`,
+      [scheduled.id, scheduled.establishment_id],
+    );
+    if (claimed.affectedRows !== 1) continue;
     try {
       await pool.query(`UPDATE messages SET status = 'sent', sent_at = NOW() WHERE id = ? AND establishment_id = ?`, [scheduled.message_id, scheduled.establishment_id]);
       await pool.query(`UPDATE scheduled_messages SET status = 'sent', last_attempt_at = NOW() WHERE id = ? AND establishment_id = ?`, [scheduled.id, scheduled.establishment_id]);

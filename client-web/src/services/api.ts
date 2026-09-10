@@ -32,6 +32,21 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload.data as T;
 }
 
+export async function downloadProtectedFile(url: string, filename: string): Promise<void> {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const target = url.startsWith('/') ? `${API_URL.replace(/\/api$/, '')}${url}` : url;
+  const response = await fetch(target, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!response.ok) throw new ApiError('Impossible de télécharger la pièce jointe.', response.status);
+  const objectUrl = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 export const authApi = {
   login: (role: 'PARENT' | 'STUDENT' | 'STAFF', identifier: string, password: string) => request<{ token: string; user: User }>('/auth/mobile-login', {
     method: 'POST',

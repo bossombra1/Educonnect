@@ -15,3 +15,11 @@ export const otpVerifyRateLimit = rateLimit({
   legacyHeaders: false,
   message: { success: false, error: 'Trop de tentatives de vérification. Veuillez réessayer plus tard.' },
 });
+
+export const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { success: false, error: 'Trop de tentatives de connexion. Veuillez réessayer plus tard.' },
+});

@@ -3,7 +3,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
-import path from 'path';
 import routes from './routes/index.js';
 import { env } from './config/env.js';
 
@@ -15,16 +14,20 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: true,
-  credentials: true,
+  origin: (origin, callback) => {
+    if (!origin || env.api.corsOrigins.length === 0 || env.api.corsOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Origine CORS non autorisée.'));
+  },
+  credentials: false,
 }));
 
 app.use(compression());
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-
-app.use('/uploads', express.static(path.resolve(env.upload.dir)));
 
 app.use('/api', routes);
 
@@ -46,6 +49,11 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
   if (err.type === 'entity.too.large') {
     res.status(413).json({ success: false, error: 'Fichier trop volumineux.' });
+    return;
+  }
+
+  if (err.message === 'Origine CORS non autorisée.') {
+    res.status(403).json({ success: false, error: err.message });
     return;
   }
 

@@ -7,6 +7,7 @@ import { uploadMiddleware } from '../middleware/upload.js';
 const router = Router();
 
 router.post('/', authenticate, requireAdmin(), uploadMiddleware.single('file'), uploadController.uploadFile);
+router.get('/*', authenticate, uploadController.downloadFile);
 router.delete('/:filename', authenticate, requireAdmin(), uploadController.deleteFile);
 
 export default router;

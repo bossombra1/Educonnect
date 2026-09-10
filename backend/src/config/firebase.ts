@@ -36,7 +36,8 @@ export async function sendPushNotification(
   userId: number,
   title: string,
   body: string,
-  data?: Record<string, string>
+  data?: Record<string, string>,
+  notificationId?: number,
 ): Promise<boolean> {
   if (!isFirebaseInitialized) return false;
 
@@ -60,13 +61,9 @@ export async function sendPushNotification(
     if (data) message.data = data;
 
     const messageId = await admin.messaging().send(message);
-    await pool.query(
-      `UPDATE notifications
-       SET fcm_message_id = ?, fcm_status = 'sent', sent_at = COALESCE(sent_at, NOW())
-       WHERE user_id = ? AND title = ? AND body = ? AND fcm_status = 'pending'
-       ORDER BY id DESC LIMIT 1`,
-      [messageId, userId, title, body]
-    );
+    if (notificationId) {
+      await pool.query('UPDATE notifications SET fcm_message_id = ?, fcm_status = \'sent\', sent_at = COALESCE(sent_at, NOW()) WHERE id = ? AND user_id = ?', [messageId, notificationId, userId]);
+    }
     return true;
   } catch (err) {
     console.error(`[Firebase] Failed to send push to user ${userId}:`, (err as Error).message);
@@ -83,7 +80,8 @@ export async function sendBulkPushNotificationsDetailed(
   userIds: number[],
   title: string,
   body: string,
-  data?: Record<string, string>
+  data?: Record<string, string>,
+  notificationIds: number[] = []
 ): Promise<BulkPushResult> {
   if (!isFirebaseInitialized || userIds.length === 0) return { successCount: 0, results: [] };
 
@@ -112,23 +110,12 @@ export async function sendBulkPushNotificationsDetailed(
       ...(!item.success && item.error ? { error: item.error.message } : {}),
     }));
 
-    for (const result of results) {
+    for (const [index, result] of results.entries()) {
+      const notificationId = notificationIds[index];
       if (result.success && result.messageId) {
-        await pool.query(
-          `UPDATE notifications
-           SET fcm_message_id = ?, fcm_status = 'sent', sent_at = COALESCE(sent_at, NOW())
-           WHERE user_id = ? AND title = ? AND body = ? AND fcm_status = 'pending'
-           ORDER BY id DESC LIMIT 1`,
-          [result.messageId, result.userId, title, body]
-        );
+        if (notificationId) await pool.query('UPDATE notifications SET fcm_message_id = ?, fcm_status = \'sent\', sent_at = COALESCE(sent_at, NOW()) WHERE id = ? AND user_id = ?', [result.messageId, notificationId, result.userId]);
       } else if (!result.success) {
-        await pool.query(
-          `UPDATE notifications
-           SET fcm_status = 'failed'
-           WHERE user_id = ? AND title = ? AND body = ? AND fcm_status = 'pending'
-           ORDER BY id DESC LIMIT 1`,
-          [result.userId, title, body]
-        );
+        if (notificationId) await pool.query('UPDATE notifications SET fcm_status = \'failed\' WHERE id = ? AND user_id = ?', [notificationId, result.userId]);
       }
     }
 

@@ -109,20 +109,21 @@ Ouvrez le fichier `.env` avec un éditeur de texte et vérifiez la configuration
 
 ```env
 # Configuration de la base de données
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=
-DB_NAME=educonnect
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=
+MYSQL_DATABASE=educonnect
+CORS_ORIGINS=http://localhost:5173,http://localhost:5174
 ```
 
-> **Important** : Avec WAMPServer, le mot de passe de l'utilisateur `root` est **vide**. Laissez `DB_PASSWORD` sans valeur.
+> **Important** : Avec WAMPServer, le mot de passe de l'utilisateur `root` est **vide** en développement uniquement. Utilisez un compte MySQL dédié avec un mot de passe en production.
 
 Vérifiez également les autres variables :
 
 ```env
 # Serveur
-PORT=3000
+API_PORT=3000
 NODE_ENV=development
 
 # JWT
@@ -208,7 +209,7 @@ Après connexion, vous devriez voir le **tableau de bord** avec les statistiques
 
 ## 4. Installation de l'application mobile
 
-L'application mobile permet aux parents de consulter les messages reçus de l'établissement.
+Le dépôt actuel contient le client web (`client-web`) pour les parents, élèves et personnels. Le dossier `mobile/` décrit dans les anciennes versions de cette documentation n'est pas présent dans cette révision ; les instructions Expo ci-dessous restent donc suspendues jusqu'à la restauration et au versionnement de cette application.
 
 ### 4.1 Méthode A — Développement avec Expo Go (recommandé pour le développement)
 
